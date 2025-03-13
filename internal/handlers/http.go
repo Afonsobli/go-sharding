@@ -68,6 +68,7 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
     }
 
     // Try to open the file locally first
+    // TODO: use the shards, not the hash
     file, err := os.Open(hash)
     if err != nil {
         if os.IsNotExist(err) {

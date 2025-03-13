@@ -1,0 +1,86 @@
+package sharding
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+)
+
+const ShardSize = 1 * 1024 * 1024 // 1MB per shard
+
+type Shard struct {
+	Index            int
+	Hash             string
+	Size             int64
+}
+
+// SplitFile splits a file into multiple shards
+func SplitFile(filePath string, shardsDir string) ([]Shard, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	// Create shards directory if it doesn't exist
+	err = os.MkdirAll(shardsDir, 0755)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create shards directory: %v", err)
+	}
+
+	var shards []Shard
+	buffer := make([]byte, ShardSize)
+	shardIndex := 0
+
+	for {
+		n, err := file.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error reading file: %v", err)
+		}
+
+		shardPath := filepath.Join(shardsDir, fmt.Sprintf("%s.%d", filepath.Base(filePath), shardIndex))
+		err = os.WriteFile(shardPath, buffer[:n], 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write shard: %v", err)
+		}
+
+		shards = append(shards, Shard{
+			Index: shardIndex,
+			Hash:  shardPath,
+			Size:  int64(n),
+		})
+		shardIndex++
+	}
+
+	return shards, nil
+}
+
+// MergeShards combines multiple shards back into the original file
+func MergeShards(shards []Shard, outputPath string) error {
+    outFile, err := os.Create(outputPath)
+    if err != nil {
+        return fmt.Errorf("failed to create output file: %v", err)
+    }
+    defer outFile.Close()
+
+    for _, shard := range shards {
+        shardFile, err := os.Open(shard.Hash)
+        if err != nil {
+            return fmt.Errorf("failed to open shard %d: %v", shard.Index, err)
+        }
+        
+        // Copy only the actual size of the shard
+		fmt.Printf("Copying shard %d and size %d\n", shard.Index, shard.Size)
+        _, err = io.CopyN(outFile, shardFile, shard.Size)
+        shardFile.Close()
+        if err != nil {
+            return fmt.Errorf("failed to write shard %d: %v", shard.Index, err)
+        }
+    }
+
+    return nil
+}
