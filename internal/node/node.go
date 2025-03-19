@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -53,19 +54,29 @@ func New() (*P2PNode, error) {
 	node.Addr = fmt.Sprintf("%s/p2p/%s", h.Addrs()[0], h.ID().String())
 	fmt.Printf("Node address: %s/p2p/%s\n", h.Addrs()[0], h.ID().String())
 
-	mdnsService := mdns.NewMdnsService(h, "libp2p-file-upload", node)
-	if mdnsService == nil {
-		return nil, fmt.Errorf("failed to create mDNS service")
-	}
+	configureMDNS(node)
 
-	err = mdnsService.Start()
+	err = configureMDNS(node)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start mDNS service: %v", err)
+		return nil, err
 	}
 
 	node.host.SetStreamHandler("/file/1.0.0", (&node).handleIncomingFile)
 
 	return &node, nil
+}
+
+func configureMDNS(n P2PNode) error {
+	mdnsService := mdns.NewMdnsService(n.host, "libp2p-file-upload", n)
+	if mdnsService == nil {
+		return fmt.Errorf("failed to create mDNS service")
+	}
+
+	err := mdnsService.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start mDNS service: %v", err)
+	}
+	return nil
 }
 
 func (n P2PNode) HandlePeerFound(pi peer.AddrInfo) {
@@ -130,7 +141,10 @@ func (n P2PNode) DistributeFile(filePath string) {
 	// Store shard information
 	n.shardMap[filePath] = shards
 
-	// Distribute shards across peers
+	n.distributeShards(shards)
+}
+
+func (n P2PNode) distributeShards(shards []sharding.Shard) {
 	peerList := make([]peer.ID, 0, len(n.peerAddrs))
 	for peerID := range n.peerAddrs {
 		peerList = append(peerList, peerID)
@@ -154,156 +168,153 @@ func (n P2PNode) DistributeFile(filePath string) {
 func (n P2PNode) RequestFileFromPeers(hash string) error {
 	fmt.Println("Requesting file from peers")
 	printShardsMap(n)
-	if shards, exists := n.shardMap[hash]; exists {
-		fmt.Println("Shard info found")
-		mlIndexes, hIndex := missingLowerIndexes(shards)
-		fmt.Println("mlIndexes:", mlIndexes)
-		fmt.Println("hIndex:", hIndex)
+	err := n.missingShards(hash)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve missing shards: %v", err)
+	}
+	sortedShards := sortShards(n.shardMap[hash])
+	fmt.Println("sortedShards:", sortedShards)
 
-		fmt.Println("shards:", shards)
-
-		missingShards, err := n.missingShards(hash, mlIndexes, hIndex)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve missing shards: %v", err)
-		}
-		fmt.Println("missingShards:", missingShards)
-		shards = append(shards, missingShards...)
-
-		sortedShards := sortShards(shards)
-		fmt.Println("sortedShards:", sortedShards)
-
-		// Merge shards back into the original file
-		// err = sharding.MergeShards(shards, hash)
-		err = sharding.MergeShards(sortedShards, hash)
-		if err != nil {
-			return fmt.Errorf("failed to merge shards: %v", err)
-		}
-
-		return nil
+	// Merge shards back into the original file
+	err = sharding.MergeShards(sortedShards, hash)
+	if err != nil {
+		return fmt.Errorf("failed to merge shards: %v", err)
 	}
 
-	// If we don't have shard information, throw an error for now
-	// TODO: Implement shard discovery
-	return fmt.Errorf("shard information not found")
+	return nil
 }
 
-// TODO - optimise this function
-func missingLowerIndexes(shards []sharding.Shard) ([]int, int) {
-	// Create an array of indexes that are missing and lower than the highest index in the list
-	missing := make([]int, 0)
-	highest := 0
-	for _, shard := range shards {
-		if shard.Index > highest {
-			highest = shard.Index
-		}
+func (n P2PNode) missingShards(hash string) error {
+	_, exists := n.shardMap[hash]
+	if !exists {
+		// If we don't have shard information, throw an error for now
+		// TODO: Implement shard discovery
+		return fmt.Errorf("shard information not found")
 	}
-	for i := 0; i < highest; i++ {
-		found := false
-		for _, shard := range shards {
-			if shard.Index == i {
-				found = true
-				break
-			}
-		}
-		if !found {
-			fmt.Println("Missing shard:", i)
-			missing = append(missing, i)
-		}
-	}
-	return missing, highest
+	fmt.Println("Shard info found")
+	n.requestMissingShards(hash)
+	return nil
 }
 
-func (n P2PNode) missingShards(hash string, missingLowerIndexes []int, highestIndex int) ([]sharding.Shard, error) {
+func (n P2PNode) requestMissingShards(hash string) {
 	fmt.Println("Requesting missing shards")
-	missingShards := make([]sharding.Shard, 0)
-
-	// Request each shard from the respective peer
-	for _, index := range missingLowerIndexes {
-		hashName, size, err := n.requestShard(hash + "." + strconv.Itoa(index))
-		if err != nil {
-			return []sharding.Shard{}, fmt.Errorf("failed to retrieve shard %d: %v", index, err)
-		}
-		missingShards = append(missingShards, sharding.Shard{
-			Index: index,
-			Hash:  hashName,
-			Size:  size,
-		})
-		n.shardMap[hash] = append(n.shardMap[hash], sharding.Shard{
-			Index: index,
-			Hash:  hashName,
-			Size:  size,
-		})
-	}
-
 	// TODO: This has a problem, it will request shards until an error is thrown
 	// If a retrival fails, it will not try to retrieve the next shard
 	// This is a temporary solution
-	i := highestIndex + 1
+	i := 0
 	for {
+		if hasShardIndex(n.shardMap[hash], i) {
+			fmt.Printf("Already have shard %d, skipping\n", i)
+			i++
+			continue
+		}
+
 		fmt.Println("Requesting shard", i)
-		hashName, size, err := n.requestShard(hash + "." + strconv.Itoa(i))
+		shard, err := n.requestSingleShard(hash + "." + strconv.Itoa(i))
 		if err != nil {
 			break
 		}
-		missingShards = append(missingShards, sharding.Shard{
-			Index: i,
-			Hash:  hashName,
-			Size:  size,
-		})
+		n.shardMap[hash] = append(n.shardMap[hash], shard)
 		i++
 	}
-
-	return missingShards, nil
 }
 
-// Add helper method for requesting individual shards
-// TODO: change return type to shard struct
-func (n P2PNode) requestShard(shardHash string) (string, int64, error) {
-	// TODO: This is a temporary solution
-	// Should find a better way to add this to the shard hash
-	shardHash = n.shardsDir + "/" + shardHash
-
-	fmt.Println("Requesting shard", shardHash)
-	fmt.Println("peer ids in request shard", n.peerAddrs)
-	// Similar to the original RequestFileFromPeers logic but for a single shard
-	for peerID := range n.peerAddrs {
-		stream, err := n.host.NewStream(context.Background(), peerID, "/file/1.0.0")
-		if err != nil {
-			fmt.Printf("Failed to create stream to peer %s: %v\n", peerID, err)
-			continue
-		}
-		defer stream.Close()
-
-		_, err = stream.Write([]byte("GET " + shardHash + "\n"))
-		if err != nil {
-			fmt.Printf("Failed to send request to peer %s: %v\n", peerID, err)
-			continue
-		}
-
-		reader := bufio.NewReader(stream)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Printf("Failed to read response from peer %s: %v\n", peerID, err)
-			continue
-		}
-
-		if strings.TrimSpace(response) == "OK" {
-			file, err := os.Create(shardHash)
-			if err != nil {
-				fmt.Printf("Failed to create file: %v\n", err)
-				return "", 0, err
-			}
-			defer file.Close()
-
-			written, err := io.Copy(file, reader)
-			if err != nil {
-				fmt.Printf("Failed to write file: %v\n", err)
-				return "", 0, err
-			}
-			return shardHash, written, nil
+// Helper function to check if a shard with a specific index exists
+func hasShardIndex(shards []sharding.Shard, index int) bool {
+	for _, shard := range shards {
+		if shard.Index == index {
+			return true
 		}
 	}
-	return "", 0, fmt.Errorf("shard not found in any peer")
+	return false
+}
+
+func (n P2PNode) requestSingleShard(fullShardPath string) (sharding.Shard, error) {
+	// TODO: This is a temporary solution
+	// Should find a better way to add this to the shard hash
+	fullShardPath = n.shardsDir + "/" + fullShardPath
+
+	fmt.Println("Requesting shard", fullShardPath)
+	fmt.Println("peer ids known", n.peerAddrs)
+	for peerID := range n.peerAddrs {
+		fmt.Println("requesting peer id", peerID)
+
+		shard, err := n.requestShardFromPeer(peerID, fullShardPath)
+		if err == nil {
+			return shard, nil
+		}
+		fmt.Printf("Peer %s couldn't provide shard: %v\n", peerID, err)
+	}
+	return sharding.Shard{}, fmt.Errorf("shard not found in any peer")
+}
+
+func (n P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (sharding.Shard, error) {
+	// Adding timeout to stream creation
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// Create stream to peer
+	stream, err := n.host.NewStream(ctx, peerID, "/file/1.0.0")
+	if err != nil {
+		return sharding.Shard{}, fmt.Errorf("failed to create stream: %v", err)
+	}
+	defer stream.Close()
+
+	if err := n.sendGetRequest(stream, shardPath); err != nil {
+		return sharding.Shard{}, err
+	}
+
+	reader := bufio.NewReader(stream)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return sharding.Shard{}, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	if strings.TrimSpace(response) != "OK" {
+		return sharding.Shard{}, fmt.Errorf("peer does not have shard")
+	}
+
+	// Download the file and create shard metadata
+	return n.downloadShardFile(shardPath, reader)
+}
+
+func (n P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
+	_, err := stream.Write([]byte("GET " + shardPath + "\n"))
+	if err != nil {
+		return fmt.Errorf("failed to send request: %v", err)
+	}
+	return nil
+}
+
+func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sharding.Shard, error) {
+	// Create file
+	file, err := os.Create(shardPath)
+	if err != nil {
+		return sharding.Shard{}, fmt.Errorf("failed to create file: %v", err)
+	}
+	defer file.Close()
+
+	// Download file content
+	written, err := io.Copy(file, reader)
+	if err != nil {
+		// If we got a partial file, we might want to keep it and report the error
+		return sharding.Shard{}, fmt.Errorf("failed to write file: %v", err)
+	}
+
+	// Create shard metadata
+	return n.createShardMetadata(shardPath, written)
+}
+
+func (n P2PNode) createShardMetadata(shardPath string, size int64) (sharding.Shard, error) {
+	index, err := sharding.ShardIndex(shardPath)
+	if err != nil {
+		return sharding.Shard{}, fmt.Errorf("failed to get shard index: %v", err)
+	}
+
+	return sharding.Shard{
+		Index: index,
+		Hash:  shardPath,
+		Size:  size,
+	}, nil
 }
 
 func (n *P2PNode) handleIncomingFile(stream network.Stream) {

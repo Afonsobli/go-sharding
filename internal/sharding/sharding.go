@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const ShardSize = 1 * 1024 * 1024 // 1MB per shard
@@ -13,6 +14,24 @@ type Shard struct {
 	Index            int
 	Hash             string
 	Size             int64
+}
+
+// TODO: Refactor other partf of the code to use this function
+// TODO: Create other functions to handle index and path
+// ShardIndex returns the index of a shard from its path
+func ShardIndex(shardPath string) (int, error) {
+	fmt.Println("shardPath", shardPath)
+	parts := strings.Split(shardPath, ".")
+	fmt.Println("parts", parts)
+	if len(parts) < 2 {
+		return 0, fmt.Errorf("invalid shard path: %s", shardPath)
+	}
+	var index int
+	_, err := fmt.Sscanf(parts[len(parts)-1], "%d", &index)
+	if err != nil {
+		return 0, fmt.Errorf("invalid shard index: %v", err)
+	}
+	return index, nil
 }
 
 // SplitFile splits a file into multiple shards
