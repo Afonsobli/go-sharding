@@ -361,162 +361,84 @@ func (n *P2PNode) handleGetRequest(stream network.Stream, filename string) {
 }
 
 func (n *P2PNode) handleFileUpload(stream network.Stream, reader *bufio.Reader, filename string) {
-	// Create shards directory if it doesn't exist
-	dir := filepath.Dir(filename)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		fmt.Printf("Error creating directory %s: %v\n", dir, err)
-		return
-	}
+    // Create directories if needed
+    dir := filepath.Dir(filename)
+    if err := os.MkdirAll(dir, 0755); err != nil {
+        fmt.Printf("Error creating directory %s: %v\n", dir, err)
+        return
+    }
 
-	// Create the file
-	file, err := os.Create(filename)
-	if err != nil {
-		fmt.Printf("Error creating file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	// Copy the contents to the file
-	byteSize, err := io.Copy(file, reader)
-	if err != nil {
-		fmt.Printf("Error writing file: %v\n", err)
-		return
-	}
+    // Create and write to file
+    file, byteSize, err := n.createAndWriteFile(filename, reader)
+    if err != nil {
+        fmt.Printf("Error with file handling: %v\n", err)
+        return
+    }
+    defer file.Close()
 
 	printShardsMap(*n)
 
 	// Update shards map if this is a shard file
-	if strings.Contains(filename, n.shardsDir+"/") {
-		fmt.Println("Updating shards map")
-		// Extract original file hash and shard index from filename
-		parts := strings.Split(filepath.Base(filename), ".")
-		if len(parts) == 2 {
-			originalFile := parts[0]
-			shardIndex := parts[1]
-			// Convert string index to integer
-			shardIdx, err := strconv.Atoi(shardIndex)
-			if err != nil {
-				fmt.Printf("Error converting shard index: %v\n", err)
-				return
-			}
+    if strings.Contains(filename, n.shardsDir+"/") {
+        n.updateShardMetadata(filename, byteSize)
+    }
 
-			// Create or update shard information
-			shard := sharding.Shard{
-				Index: shardIdx,
-				Hash:  filename,
-				Size:  byteSize,
-			}
-
-			// Add to shards map
-			if _, exists := n.shardMap[originalFile]; !exists {
-				n.shardMap[originalFile] = make([]sharding.Shard, 0)
-			}
-			n.shardMap[originalFile] = append(n.shardMap[originalFile], shard)
-
-			fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
-		}
-	}
-
-	fmt.Printf("Received file: %s from peer: %s\n with: %d bytes\n", filename, stream.Conn().RemotePeer(), byteSize)
+    fmt.Printf("Received file: %s from peer: %s with: %d bytes\n", 
+               filename, stream.Conn().RemotePeer(), byteSize)
 }
 
-// func (n *P2PNode) handleIncomingFile(stream network.Stream) {
-// 	defer stream.Close()
+func (n *P2PNode) createAndWriteFile(filename string, reader *bufio.Reader) (*os.File, int64, error) {
+    // Create the file
+    file, err := os.Create(filename)
+    if err != nil {
+        return nil, 0, fmt.Errorf("error creating file: %v", err)
+    }
 
-// 	// Read the first line
-// 	reader := bufio.NewReader(stream)
-// 	firstLine, err := reader.ReadString('\n')
-// 	if err != nil {
-// 		fmt.Printf("Error reading request: %v\n", err)
-// 		return
-// 	}
-// 	firstLine = strings.TrimSpace(firstLine)
+    // Copy the contents to the file
+    byteSize, err := io.Copy(file, reader)
+    if err != nil {
+        file.Close() // Close file on error
+        return nil, 0, fmt.Errorf("error writing file: %v", err)
+    }
 
-// 	// Check if this is a GET request
-// 	if strings.HasPrefix(firstLine, "GET ") {
-// 		filename := strings.TrimPrefix(firstLine, "GET ")
-// 		file, err := os.Open(filename)
-// 		if err != nil {
-// 			stream.Write([]byte("NOT FOUND\n"))
-// 			return
-// 		}
-// 		defer file.Close()
+    return file, byteSize, nil
+}
 
-// 		// Send OK response
-// 		_, err = stream.Write([]byte("OK\n"))
-// 		if err != nil {
-// 			return
-// 		}
+func (n *P2PNode) updateShardMetadata(filename string, byteSize int64) {
+    fmt.Println("Updating shards map")
+    
+    // Extract original file hash and shard index from filename
+    parts := strings.Split(filepath.Base(filename), ".")
+    if len(parts) != 2 {
+        fmt.Printf("Invalid shard filename format: %s\n", filename)
+        return
+    }
+    
+    originalFile := parts[0]
+    shardIndex := parts[1]
+    
+    // Convert string index to integer
+    shardIdx, err := strconv.Atoi(shardIndex)
+    if err != nil {
+        fmt.Printf("Error converting shard index: %v\n", err)
+        return
+    }
 
-// 		// Send file contents
-// 		_, err = io.Copy(stream, file)
-// 		if err != nil {
-// 			fmt.Printf("Error sending file: %v\n", err)
-// 		}
-// 		return
-// 	}
+    // Create shard information
+    shard := sharding.Shard{
+        Index: shardIdx,
+        Hash:  filename,
+        Size:  byteSize,
+    }
 
-// 	// Handle regular file upload
-// 	filename := firstLine
+    // Add to shards map
+    if _, exists := n.shardMap[originalFile]; !exists {
+        n.shardMap[originalFile] = make([]sharding.Shard, 0)
+    }
+    n.shardMap[originalFile] = append(n.shardMap[originalFile], shard)
 
-// 	// Create shards directory if it doesn't exist
-// 	dir := filepath.Dir(filename)
-// 	if err := os.MkdirAll(dir, 0755); err != nil {
-// 		fmt.Printf("Error creating directory %s: %v\n", dir, err)
-// 		return
-// 	}
-
-// 	// Create the file
-// 	file, err := os.Create(filename)
-// 	if err != nil {
-// 		fmt.Printf("Error creating file: %v\n", err)
-// 		return
-// 	}
-// 	defer file.Close()
-
-// 	// Copy the contents to the file
-// 	byteSize, err := io.Copy(file, reader)
-// 	if err != nil {
-// 		fmt.Printf("Error writing file: %v\n", err)
-// 		return
-// 	}
-
-// 	printShardsMap(*n)
-
-// 	// Update shards map if this is a shard file
-// 	if strings.Contains(filename, n.shardsDir+"/") {
-// 		fmt.Println("Updating shards map")
-// 		// Extract original file hash and shard index from filename
-// 		parts := strings.Split(filepath.Base(filename), ".")
-// 		if len(parts) == 2 {
-// 			originalFile := parts[0]
-// 			shardIndex := parts[1]
-// 			// Convert string index to integer
-// 			shardIdx, err := strconv.Atoi(shardIndex)
-// 			if err != nil {
-// 				fmt.Printf("Error converting shard index: %v\n", err)
-// 				return
-// 			}
-
-// 			// Create or update shard information
-// 			shard := sharding.Shard{
-// 				Index: shardIdx,
-// 				Hash:  filename,
-// 				Size:  byteSize,
-// 			}
-
-// 			// Add to shards map
-// 			if _, exists := n.shardMap[originalFile]; !exists {
-// 				n.shardMap[originalFile] = make([]sharding.Shard, 0)
-// 			}
-// 			n.shardMap[originalFile] = append(n.shardMap[originalFile], shard)
-
-// 			fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
-// 		}
-// 	}
-
-// 	fmt.Printf("Received file: %s from peer: %s\n with: %d bytes\n", filename, stream.Conn().RemotePeer(), byteSize)
-// }
+    fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
+}
 
 // TODO: This is not perfect as we are using goroutines which also print outputs
 func printShardsMap(n P2PNode) {
