@@ -318,44 +318,49 @@ func (n P2PNode) createShardMetadata(shardPath string, size int64) (sharding.Sha
 }
 
 func (n *P2PNode) handleIncomingFile(stream network.Stream) {
-	defer stream.Close()
+    defer stream.Close()
 
-	// Read the first line
-	reader := bufio.NewReader(stream)
-	firstLine, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Printf("Error reading request: %v\n", err)
-		return
+    // Read the first line
+    reader := bufio.NewReader(stream)
+    firstLine, err := reader.ReadString('\n')
+    if err != nil {
+        fmt.Printf("Error reading request: %v\n", err)
+        return
+    }
+    firstLine = strings.TrimSpace(firstLine)
+
+    // Route to appropriate handler based on request type
+    if strings.HasPrefix(firstLine, "GET ") {
+        filename := strings.TrimPrefix(firstLine, "GET ")
+        n.handleGetRequest(stream, filename)
+    } else {
+        n.handleFileUpload(stream, reader, firstLine)
 	}
-	firstLine = strings.TrimSpace(firstLine)
+}
 
-	// Check if this is a GET request
-	if strings.HasPrefix(firstLine, "GET ") {
-		filename := strings.TrimPrefix(firstLine, "GET ")
-		file, err := os.Open(filename)
-		if err != nil {
-			stream.Write([]byte("NOT FOUND\n"))
-			return
-		}
-		defer file.Close()
+func (n *P2PNode) handleGetRequest(stream network.Stream, filename string) {
+    file, err := os.Open(filename)
+    if err != nil {
+        stream.Write([]byte("NOT FOUND\n"))
+        return
+    }
+    defer file.Close()
 
-		// Send OK response
-		_, err = stream.Write([]byte("OK\n"))
-		if err != nil {
-			return
-		}
+    // Send OK response
+    _, err = stream.Write([]byte("OK\n"))
+    if err != nil {
+        fmt.Printf("Error sending OK response: %v\n", err)
+        return
+    }
 
-		// Send file contents
-		_, err = io.Copy(stream, file)
-		if err != nil {
-			fmt.Printf("Error sending file: %v\n", err)
-		}
-		return
-	}
+    // Send file contents
+    _, err = io.Copy(stream, file)
+    if err != nil {
+        fmt.Printf("Error sending file: %v\n", err)
+    }
+}
 
-	// Handle regular file upload
-	filename := firstLine
-
+func (n *P2PNode) handleFileUpload(stream network.Stream, reader *bufio.Reader, filename string) {
 	// Create shards directory if it doesn't exist
 	dir := filepath.Dir(filename)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -414,6 +419,104 @@ func (n *P2PNode) handleIncomingFile(stream network.Stream) {
 
 	fmt.Printf("Received file: %s from peer: %s\n with: %d bytes\n", filename, stream.Conn().RemotePeer(), byteSize)
 }
+
+// func (n *P2PNode) handleIncomingFile(stream network.Stream) {
+// 	defer stream.Close()
+
+// 	// Read the first line
+// 	reader := bufio.NewReader(stream)
+// 	firstLine, err := reader.ReadString('\n')
+// 	if err != nil {
+// 		fmt.Printf("Error reading request: %v\n", err)
+// 		return
+// 	}
+// 	firstLine = strings.TrimSpace(firstLine)
+
+// 	// Check if this is a GET request
+// 	if strings.HasPrefix(firstLine, "GET ") {
+// 		filename := strings.TrimPrefix(firstLine, "GET ")
+// 		file, err := os.Open(filename)
+// 		if err != nil {
+// 			stream.Write([]byte("NOT FOUND\n"))
+// 			return
+// 		}
+// 		defer file.Close()
+
+// 		// Send OK response
+// 		_, err = stream.Write([]byte("OK\n"))
+// 		if err != nil {
+// 			return
+// 		}
+
+// 		// Send file contents
+// 		_, err = io.Copy(stream, file)
+// 		if err != nil {
+// 			fmt.Printf("Error sending file: %v\n", err)
+// 		}
+// 		return
+// 	}
+
+// 	// Handle regular file upload
+// 	filename := firstLine
+
+// 	// Create shards directory if it doesn't exist
+// 	dir := filepath.Dir(filename)
+// 	if err := os.MkdirAll(dir, 0755); err != nil {
+// 		fmt.Printf("Error creating directory %s: %v\n", dir, err)
+// 		return
+// 	}
+
+// 	// Create the file
+// 	file, err := os.Create(filename)
+// 	if err != nil {
+// 		fmt.Printf("Error creating file: %v\n", err)
+// 		return
+// 	}
+// 	defer file.Close()
+
+// 	// Copy the contents to the file
+// 	byteSize, err := io.Copy(file, reader)
+// 	if err != nil {
+// 		fmt.Printf("Error writing file: %v\n", err)
+// 		return
+// 	}
+
+// 	printShardsMap(*n)
+
+// 	// Update shards map if this is a shard file
+// 	if strings.Contains(filename, n.shardsDir+"/") {
+// 		fmt.Println("Updating shards map")
+// 		// Extract original file hash and shard index from filename
+// 		parts := strings.Split(filepath.Base(filename), ".")
+// 		if len(parts) == 2 {
+// 			originalFile := parts[0]
+// 			shardIndex := parts[1]
+// 			// Convert string index to integer
+// 			shardIdx, err := strconv.Atoi(shardIndex)
+// 			if err != nil {
+// 				fmt.Printf("Error converting shard index: %v\n", err)
+// 				return
+// 			}
+
+// 			// Create or update shard information
+// 			shard := sharding.Shard{
+// 				Index: shardIdx,
+// 				Hash:  filename,
+// 				Size:  byteSize,
+// 			}
+
+// 			// Add to shards map
+// 			if _, exists := n.shardMap[originalFile]; !exists {
+// 				n.shardMap[originalFile] = make([]sharding.Shard, 0)
+// 			}
+// 			n.shardMap[originalFile] = append(n.shardMap[originalFile], shard)
+
+// 			fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
+// 		}
+// 	}
+
+// 	fmt.Printf("Received file: %s from peer: %s\n with: %d bytes\n", filename, stream.Conn().RemotePeer(), byteSize)
+// }
 
 // TODO: This is not perfect as we are using goroutines which also print outputs
 func printShardsMap(n P2PNode) {
