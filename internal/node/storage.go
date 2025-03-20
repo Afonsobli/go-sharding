@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"shard/internal/sharding"
 	"strings"
-
-	"github.com/libp2p/go-libp2p/core/network"
 )
 
 func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sharding.Shard, error) {
@@ -31,7 +29,7 @@ func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (shar
 	return n.createShardMetadata(shardPath, written)
 }
 
-func (n *P2PNode) handleFileUpload(stream network.Stream, reader *bufio.Reader, filename string) {
+func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
 	// Create directories if needed
 	dir := filepath.Dir(filename)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -53,9 +51,6 @@ func (n *P2PNode) handleFileUpload(stream network.Stream, reader *bufio.Reader, 
 	if strings.Contains(filename, n.shardsDir+"/") {
 		n.updateShardMetadata(filename, byteSize)
 	}
-
-	fmt.Printf("Received file: %s from peer: %s with: %d bytes\n",
-		filename, stream.Conn().RemotePeer(), byteSize)
 }
 
 func (n *P2PNode) createAndWriteFile(filename string, reader *bufio.Reader) (*os.File, int64, error) {

@@ -48,7 +48,7 @@ func (n P2PNode) sendFileToPeer(filePath string, peerID peer.ID) error {
 }
 
 func (n P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (sharding.Shard, error) {
-	// Adding timeout to stream creation
+	// Timeout to stream creation
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Create stream to peer
@@ -76,7 +76,7 @@ func (n P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (shardin
 	return n.downloadShardFile(shardPath, reader)
 }
 
-func (n *P2PNode) handleIncomingFile(stream network.Stream) {
+func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 	defer stream.Close()
 
 	// Read the first line
@@ -93,8 +93,9 @@ func (n *P2PNode) handleIncomingFile(stream network.Stream) {
 		filename := strings.TrimPrefix(firstLine, "GET ")
 		n.handleGetRequest(stream, filename)
 	} else {
-		n.handleFileUpload(stream, reader, firstLine)
+		n.handleFileUpload(reader, firstLine)
 	}
+	fmt.Printf("Handled request: %s from peer: %s", firstLine, stream.Conn().RemotePeer())
 }
 
 func (n P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {

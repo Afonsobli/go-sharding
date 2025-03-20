@@ -52,7 +52,7 @@ func New() (*P2PNode, error) {
 		return nil, err
 	}
 
-	node.host.SetStreamHandler("/file/1.0.0", (&node).handleIncomingFile)
+	node.host.SetStreamHandler("/file/1.0.0", (&node).handleIncomingRequest)
 
 	return &node, nil
 }
