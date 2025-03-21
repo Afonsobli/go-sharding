@@ -11,17 +11,8 @@ import (
 )
 
 func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sharding.Shard, error) {
-	// Create file
-	file, err := os.Create(shardPath)
+	_, written, err := n.createAndWriteFile(shardPath, reader)
 	if err != nil {
-		return sharding.Shard{}, fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	// Download file content
-	written, err := io.Copy(file, reader)
-	if err != nil {
-		// If we got a partial file, we might want to keep it and report the error
 		return sharding.Shard{}, fmt.Errorf("failed to write file: %v", err)
 	}
 
