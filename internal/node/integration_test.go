@@ -41,6 +41,14 @@ func TestShardTransfer(t *testing.T) {
 	}
 	defer node2.Close()
 
+	// Wait for peer discovery and connection
+	fmt.Println("Waiting for peer discovery...")
+	success := node1.WaitForConnection(node2.ID, 5*time.Second)
+	if !success {
+		t.Fatalf("Nodes failed to discover and connect to each other")
+	}
+	fmt.Println("Nodes connected successfully")
+
 	// Create a test file in node1's directory
 	testFileName := "testfile.txt"
 	testContent := "This is a test file for P2P transfer"
@@ -52,8 +60,9 @@ func TestShardTransfer(t *testing.T) {
 	fmt.Println("wrote to testFileName", testFileName)
 	defer os.RemoveAll(testFileName)
 
-	// Wait for nodes to discover each other
-	time.Sleep(1 * time.Second)
+	if !node1.IsPeerConnected(node2.ID) {
+		t.Fatalf("Connection to peer lost before file transfer")
+	}	
 
 	// Send file from node1 to node2 (emulating sending shards)
 	err = node1.sendShardToPeer(testFileName, node2.ID)
