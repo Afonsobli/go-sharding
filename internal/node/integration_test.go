@@ -1,7 +1,6 @@
 package node
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,24 +43,17 @@ func TestShardTransfer(t *testing.T) {
 
 	// Create a test file in node1's directory
 	testFileName := "testfile.txt"
-	testFilePath := filepath.Join(node1Dir, testFileName)
 	testContent := "This is a test file for P2P transfer"
-	err = os.WriteFile(testFilePath, []byte(testContent), 0644)
+	err = os.WriteFile(testFileName, []byte(testContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	fmt.Println("wrote to testfilepath", testFilePath)
+	fmt.Println("wrote to testFileName", testFileName)
+	defer os.RemoveAll(testFileName)
 
-	// Manually connect the nodes
-	addrInfo2 := node2.host.Peerstore().PeerInfo(node2.ID)
-	err = node1.host.Connect(context.Background(), addrInfo2)
-	if err != nil {
-		t.Fatalf("Failed to connect node1 to node2: %v", err)
-	}
-
-	// Register node2 in node1's peer list
-	node1.peerAddrs[node2.ID] = node2.host.Addrs()[0]
+	// Wait for nodes to discover each other
+	time.Sleep(1 * time.Second)
 
 	// Send file from node1 to node2 (emulating sending shards)
 	err = node1.sendShardToPeer(testFileName, node2.ID)
@@ -79,6 +71,7 @@ func TestShardTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read received file: %v", err)
 	}
+	defer os.RemoveAll(receivedFilePath)
 
 	if string(receivedContent) != testContent {
 		t.Errorf("File content mismatch. Expected '%s', got '%s'", testContent, string(receivedContent))
