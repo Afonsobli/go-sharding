@@ -18,7 +18,7 @@ func (n P2PNode) RequestFileFromPeers(hash string) error {
 	fmt.Println("sortedShards:", sortedShards)
 
 	// Merge shards back into the original file
-	err = sharding.MergeShards(sortedShards, hash)
+	err = sharding.MergeShards(sortedShards, n.destDir, n.shardsDir, hash)
 	if err != nil {
 		return fmt.Errorf("failed to merge shards: %v", err)
 	}
@@ -31,6 +31,7 @@ func (n P2PNode) missingShards(hash string) error {
 	if !exists {
 		// If we don't have shard information, throw an error for now
 		// TODO: Implement shard discovery
+		fmt.Println("no info")
 		return fmt.Errorf("shard information not found")
 	}
 	fmt.Println("Shard info found")
@@ -61,17 +62,13 @@ func (n P2PNode) requestMissingShards(hash string) {
 	}
 }
 
-func (n P2PNode) requestSingleShard(fullShardPath string) (sharding.Shard, error) {
-	// TODO: This is a temporary solution
-	// Should find a better way to add this to the shard hash
-	fullShardPath = n.shardsDir + "/" + fullShardPath
-
-	fmt.Println("Requesting shard", fullShardPath)
+func (n P2PNode) requestSingleShard(shardHash string) (sharding.Shard, error) {
+	fmt.Println("Requesting shard", shardHash)
 	fmt.Println("peer ids known", n.peerAddrs)
 	for peerID := range n.peerAddrs {
 		fmt.Println("requesting peer id", peerID)
 
-		shard, err := n.requestShardFromPeer(peerID, fullShardPath)
+		shard, err := n.requestShardFromPeer(peerID, shardHash)
 		if err == nil {
 			return shard, nil
 		}

@@ -9,7 +9,7 @@ import (
     "shard/internal/node"
 )
 func main() {
-    n, err := node.New()
+    n, err := node.New("out")
     if err != nil {
         fmt.Printf("Failed to start P2P node: %s\n", err)
         return

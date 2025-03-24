@@ -16,7 +16,7 @@ type Shard struct {
 	Size             int64
 }
 
-// TODO: Refactor other partf of the code to use this function
+// TODO: Refactor other parts of the code to use this function
 // TODO: Create other functions to handle index and path
 // ShardIndex returns the index of a shard from its path
 func ShardIndex(shardPath string) (int, error) {
@@ -78,16 +78,28 @@ func SplitFile(filePath string, shardsDir string) ([]Shard, error) {
 	return shards, nil
 }
 
+// TODO: potentially has too many arguments
 // MergeShards combines multiple shards back into the original file
-func MergeShards(shards []Shard, outputPath string) error {
+func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error {
+	fmt.Println("Merging Shards...")
+	err := os.MkdirAll(outputDir, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create output directory: %v", err)
+	}
+	fmt.Println("Created outputDir", outputDir)
+
+	outputPath = filepath.Join(outputDir, outputPath)
+	fmt.Println("outputPath", outputPath)
+
     outFile, err := os.Create(outputPath)
     if err != nil {
         return fmt.Errorf("failed to create output file: %v", err)
     }
     defer outFile.Close()
 
+	fmt.Println("shards", shards)
     for _, shard := range shards {
-        shardFile, err := os.Open(shard.Hash)
+        shardFile, err := os.Open(filepath.Join(shardsDir, shard.Hash))
         if err != nil {
             return fmt.Errorf("failed to open shard %d: %v", shard.Index, err)
         }

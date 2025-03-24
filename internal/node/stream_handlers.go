@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"shard/internal/sharding"
 	"strings"
 	"time"
@@ -14,15 +15,15 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-func (n P2PNode) sendFileToPeer(filePath string, peerID peer.ID) error {
-	fmt.Println("Sending file to peers")
+func (n P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
+	fmt.Println("Sending shard to peers")
 
-	// Open the file
-	file, err := os.Open(filePath)
+	// Open the shardFile
+	shardFile, err := os.Open(shardPath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-	defer file.Close()
+	defer shardFile.Close()
 
 	// Create a new stream to the peer
 	stream, err := n.host.NewStream(context.Background(), peerID, "/file/1.0.0")
@@ -31,17 +32,17 @@ func (n P2PNode) sendFileToPeer(filePath string, peerID peer.ID) error {
 	}
 	defer stream.Close()
 
-	// First send the filename
-	filename := []byte(filePath + "\n")
-	_, err = stream.Write(filename)
+	// First send the shard name
+	shardName := []byte(filepath.Base(shardPath) + "\n")
+	_, err = stream.Write(shardName)
 	if err != nil {
-		return fmt.Errorf("failed to send filename: %v", err)
+		return fmt.Errorf("failed to send shard name: %v", err)
 	}
 
-	// Then send the file contents
-	_, err = io.Copy(stream, file)
+	// Then send the shard contents
+	_, err = io.Copy(stream, shardFile)
 	if err != nil {
-		return fmt.Errorf("failed to send file: %v", err)
+		return fmt.Errorf("failed to send shard file: %v", err)
 	}
 
 	return nil
@@ -57,6 +58,8 @@ func (n P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (shardin
 		return sharding.Shard{}, fmt.Errorf("failed to create stream: %v", err)
 	}
 	defer stream.Close()
+
+	fmt.Println("requesting shardpath", shardPath)
 
 	if err := n.sendGetRequest(stream, shardPath); err != nil {
 		return sharding.Shard{}, err
@@ -107,8 +110,10 @@ func (n P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
 }
 
 func (n *P2PNode) handleGetRequest(stream network.Stream, filename string) {
-	file, err := os.Open(filename)
+	filepath := filepath.Join(n.shardsDir, filename)
+	file, err := os.Open(filepath)
 	if err != nil {
+		fmt.Println("File not found in this peer")
 		stream.Write([]byte("NOT FOUND\n"))
 		return
 	}

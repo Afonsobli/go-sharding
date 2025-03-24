@@ -34,7 +34,7 @@ func (n P2PNode) distributeShards(shards []sharding.Shard) {
 	for i, shard := range shards {
 		peerIndex := i % len(peerList)
 		go func(s sharding.Shard, pid peer.ID) {
-			err := n.sendFileToPeer(s.Hash, pid)
+			err := n.sendShardToPeer(s.Hash, pid)
 			if err != nil {
 				fmt.Printf("Failed to send shard to peer %s: %v\n", pid, err)
 				return

@@ -1,14 +1,15 @@
 package handlers
 
 import (
-    "crypto/sha256"
-    "encoding/hex"
-    "fmt"
-    "io"
-    "net/http"
-    "os"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 
-    "shard/internal/types"
+	"shard/internal/types"
 )
 
 type Handler struct {
@@ -69,7 +70,8 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 
     // Try to open the file locally first
     // TODO: use the shards, not the hash
-    file, err := os.Open(hash)
+    // TODO: refactor to not use hardcoded path
+    file, err := os.Open(filepath.Join("out", hash))
     if err != nil {
         if os.IsNotExist(err) {
             // File not found locally, try to get it from peers
@@ -79,7 +81,7 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
                 return
             }
             // Now try to open the file again
-            file, err = os.Open(hash)
+            file, err = os.Open(filepath.Join("out", hash))
             if err != nil {
                 http.Error(w, "Error opening file after retrieval", http.StatusInternalServerError)
                 return
