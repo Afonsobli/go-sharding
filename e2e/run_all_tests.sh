@@ -4,7 +4,10 @@ set -e
 echo "Running all E2E tests..."
 FAILED=0
 
-for test in /app/e2e/*.sh; do
+# Get the basename of the current script to exclude it
+SCRIPT_NAME=$(basename "$0")
+
+for test in /app/e2e/tests/*.sh; do
   echo "⚙️ Running test: $test ------------------------------"
   if ! $test; then
     echo "❌ Test failed: $test"

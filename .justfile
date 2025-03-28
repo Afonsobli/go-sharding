@@ -18,5 +18,5 @@ clean:
 
 e2e:
     docker system prune -af
-    ./run_e2e_tests.sh
+    ./docker_test_runner.sh
     

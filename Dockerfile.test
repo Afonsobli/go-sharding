@@ -9,10 +9,7 @@ RUN apk add --no-cache curl jq bash
 # Copy all test scripts from e2e directory
 COPY e2e/ /app/e2e/
 
-# Copy the runner script
-RUN chmod +x /app/test_runner.sh
-
 # Make all scripts executable recursively
 RUN find /app/e2e -type f -name "*.sh" -exec chmod +x {} \;
 
-CMD ["/app/test_runner.sh"]
+CMD ["/app/e2e/run_all_tests.sh"]
