@@ -58,7 +58,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
     h.node.DistributeFile(finalFilename)
 
     // Respond to the client indicating success
-    fmt.Fprintln(w, "File uploaded successfully and distributed to peers!")
+    fmt.Fprintln(w, "File distributed to peers!")
 }
 
 func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {

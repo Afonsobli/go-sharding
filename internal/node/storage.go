@@ -37,8 +37,6 @@ func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
 	}
 	defer file.Close()
 
-	n.printShardsMap()
-
 	// Update shards map if this is a shard file
 	// TODO: Change the detection method
 	// Check for dot followed by a number (e.g., ".1", ".2", etc.)

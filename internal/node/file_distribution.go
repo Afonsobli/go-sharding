@@ -7,7 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-func (n P2PNode) DistributeFile(filePath string) {
+func (n *P2PNode) DistributeFile(filePath string) {
 	fmt.Println("Distributing file to peers")
 	fmt.Println("len(n.peerAddrs):", len(n.peerAddrs))
 
@@ -24,7 +24,7 @@ func (n P2PNode) DistributeFile(filePath string) {
 	n.distributeShards(shards)
 }
 
-func (n P2PNode) distributeShards(shards []sharding.Shard) {
+func (n *P2PNode) distributeShards(shards []sharding.Shard) {
 	peerList := make([]peer.ID, 0, len(n.peerAddrs))
 	for peerID := range n.peerAddrs {
 		peerList = append(peerList, peerID)

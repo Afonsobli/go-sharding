@@ -20,6 +20,8 @@ func hasShardIndex(shards []sharding.Shard, index int) bool {
 
 func (n *P2PNode) updateShardMetadata(filename string, byteSize int64) {
 	fmt.Println("Updating shards map")
+	fmt.Println("Before Update")
+	n.printShardsMap()
 
 	// Extract original file hash and shard index from filename
 	parts := strings.Split(filepath.Base(filename), ".")
@@ -50,6 +52,9 @@ func (n *P2PNode) updateShardMetadata(filename string, byteSize int64) {
 		n.shardMap[originalFile] = make([]sharding.Shard, 0)
 	}
 	n.shardMap[originalFile] = append(n.shardMap[originalFile], shard)
+
+	fmt.Println("After Update")
+	n.printShardsMap()
 
 	fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
 }

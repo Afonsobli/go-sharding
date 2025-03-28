@@ -15,3 +15,8 @@ clean:
     rm -rf peer2/
     rm -rf peer3/
     rm -rf get/
+
+e2e:
+    docker system prune -af
+    ./run_e2e_tests.sh
+    
