@@ -9,7 +9,7 @@ import (
 	"shard/internal/sharding"
 )
 
-func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sharding.Shard, error) {
+func (n *P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sharding.Shard, error) {
 	_, written, err := n.createAndWriteFile(shardPath, reader)
 	if err != nil {
 		return sharding.Shard{}, fmt.Errorf("failed to write file: %v", err)
@@ -20,12 +20,6 @@ func (n P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (shar
 }
 
 func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
-	// Create directories if needed
-	if err := os.MkdirAll(n.shardsDir, 0755); err != nil {
-		fmt.Printf("Error creating directory %s: %v\n", n.destDir, err)
-		return
-	}
-
 	fmt.Println("Received file:", filename)
 	fmt.Println("Created:", n.shardsDir)
 
@@ -48,6 +42,12 @@ func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
 func (n *P2PNode) createAndWriteFile(filename string, reader *bufio.Reader) (*os.File, int64, error) {
 	// Create the file
 	fmt.Println("Writing to:", filepath.Join(n.shardsDir, filename))
+
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(n.shardsDir, 0755); err != nil {
+		return nil, 0, fmt.Errorf("error creating directory: %v", err)
+	}
+		
 	file, err := os.Create(filepath.Join(n.shardsDir, filename))
 	if err != nil {
 		return nil, 0, fmt.Errorf("error creating file: %v", err)

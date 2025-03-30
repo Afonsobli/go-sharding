@@ -7,7 +7,7 @@ import (
 )
 
 // RequestFileFromPeers to handle shard reconstruction
-func (n P2PNode) RequestFileFromPeers(hash string) error {
+func (n *P2PNode) RequestFileFromPeers(hash string) error {
 	fmt.Println("Requesting file from peers")
 	n.printShardsMap()
 	err := n.missingShards(hash)
@@ -26,20 +26,25 @@ func (n P2PNode) RequestFileFromPeers(hash string) error {
 	return nil
 }
 
-func (n P2PNode) missingShards(hash string) error {
+func (n *P2PNode) missingShards(hash string) error {
 	_, exists := n.shardMap[hash]
 	if !exists {
-		// If we don't have shard information, throw an error for now
-		// TODO: Implement shard discovery
-		fmt.Println("no info")
-		return fmt.Errorf("shard information not found")
+		// If we don't have shard information, initialize shard discovery
+		fmt.Println("No shard info found, initializing empty entry and attempting discovery")
+		n.shardMap[hash] = []sharding.Shard{}
+	} else {
+		fmt.Println("Shard info found, checking for missing shards")
 	}
-	fmt.Println("Shard info found")
 	n.requestMissingShards(hash)
+
+	// Verify we found at least one shard
+	if len(n.shardMap[hash]) == 0 {
+		return fmt.Errorf("failed to find any shards for file %s", hash)
+	}
 	return nil
 }
 
-func (n P2PNode) requestMissingShards(hash string) {
+func (n *P2PNode) requestMissingShards(hash string) {
 	fmt.Println("Requesting missing shards")
 	// TODO: This has a problem, it will request shards until an error is thrown
 	// If a retrival fails, it will not try to retrieve the next shard
@@ -62,7 +67,7 @@ func (n P2PNode) requestMissingShards(hash string) {
 	}
 }
 
-func (n P2PNode) requestSingleShard(shardHash string) (sharding.Shard, error) {
+func (n *P2PNode) requestSingleShard(shardHash string) (sharding.Shard, error) {
 	fmt.Println("Requesting shard", shardHash)
 	fmt.Println("peer ids known", n.peerAddrs)
 	for peerID := range n.peerAddrs {
@@ -77,7 +82,7 @@ func (n P2PNode) requestSingleShard(shardHash string) (sharding.Shard, error) {
 	return sharding.Shard{}, fmt.Errorf("shard not found in any peer")
 }
 
-func (n P2PNode) createShardMetadata(shardPath string, size int64) (sharding.Shard, error) {
+func (n *P2PNode) createShardMetadata(shardPath string, size int64) (sharding.Shard, error) {
 	index, err := sharding.ShardIndex(shardPath)
 	if err != nil {
 		return sharding.Shard{}, fmt.Errorf("failed to get shard index: %v", err)

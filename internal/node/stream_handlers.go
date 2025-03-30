@@ -15,7 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-func (n P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
+func (n *P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
 	fmt.Println("Sending shard to peers")
 
 	// Open the shardFile
@@ -48,7 +48,7 @@ func (n P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
 	return nil
 }
 
-func (n P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (sharding.Shard, error) {
+func (n *P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (sharding.Shard, error) {
 	// Timeout to stream creation
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -101,7 +101,7 @@ func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 	fmt.Printf("Handled request: %s from peer: %s", firstLine, stream.Conn().RemotePeer())
 }
 
-func (n P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
+func (n *P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
 	_, err := stream.Write([]byte("GET " + shardPath + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send request: %v", err)

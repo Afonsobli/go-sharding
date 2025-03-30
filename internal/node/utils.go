@@ -3,7 +3,7 @@ package node
 import "fmt"
 
 // TODO: This is not perfect as we are using goroutines which also print outputs
-func (n P2PNode) printShardsMap() {
+func (n *P2PNode) printShardsMap() {
 	fmt.Println("Shards map ----------------")
 	for shard, shards := range n.shardMap {
 		fmt.Println("shard:", shard)
