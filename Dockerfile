@@ -9,4 +9,6 @@ WORKDIR /app
 COPY --from=builder /app/shard /app/shard
 
 RUN mkdir -p /app/out
+RUN apk add --no-cache curl
+
 CMD ["/app/shard"]

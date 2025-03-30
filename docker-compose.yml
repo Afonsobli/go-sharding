@@ -10,6 +10,11 @@ services:
       - PORT=8080
     volumes:
       - peer1_data:/app/out
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   peer2:
     build:
@@ -22,6 +27,11 @@ services:
       - PORT=8080
     volumes:
       - peer2_data:/app/out
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   peer3:
     build:
@@ -34,15 +44,23 @@ services:
       - PORT=8080
     volumes:
       - peer3_data:/app/out
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   test:
     build:
       context: .
       dockerfile: Dockerfile.test
     depends_on:
-      - peer1
-      - peer2
-      - peer3
+      peer1:
+        condition: service_healthy
+      peer2:
+        condition: service_healthy
+      peer3:
+        condition: service_healthy
     volumes:
       - ./test_data:/test_data
 

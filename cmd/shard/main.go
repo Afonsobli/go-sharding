@@ -19,6 +19,7 @@ func main() {
     h := handlers.New(n)
     http.HandleFunc("/upload", h.Upload)
     http.HandleFunc("/file", h.GetFile)
+    http.HandleFunc("/health", h.HealthHandler)
 
     port := os.Getenv("PORT")
     if port == "" {
