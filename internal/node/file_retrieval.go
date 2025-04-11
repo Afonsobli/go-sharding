@@ -9,6 +9,7 @@ import (
 // RequestFileFromPeers to handle shard reconstruction
 func (n *P2PNode) RequestFileFromPeers(hash string) error {
 	fmt.Println("Requesting file from peers")
+	fmt.Println("Shard map before retrieval:")
 	n.printShardsMap()
 	err := n.missingShards(hash)
 	if err != nil {
@@ -31,7 +32,9 @@ func (n *P2PNode) missingShards(hash string) error {
 	if !exists {
 		// If we don't have shard information, initialize shard discovery
 		fmt.Println("No shard info found, initializing empty entry and attempting discovery")
+		n.shardMapMutex.Lock()
 		n.shardMap[hash] = []sharding.Shard{}
+		n.shardMapMutex.Unlock()
 	} else {
 		fmt.Println("Shard info found, checking for missing shards")
 	}
@@ -62,7 +65,9 @@ func (n *P2PNode) requestMissingShards(hash string) {
 		if err != nil {
 			break
 		}
+		n.shardMapMutex.Lock()
 		n.shardMap[hash] = append(n.shardMap[hash], shard)
+		n.shardMapMutex.Unlock()
 		i++
 	}
 }

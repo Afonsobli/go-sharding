@@ -13,11 +13,11 @@ import (
 )
 
 type Handler struct {
-    node types.Node
+	node types.Node
 }
 
 func New(node types.Node) *Handler {
-    return &Handler{node: node}
+	return &Handler{node: node}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -55,58 +55,73 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintln(w, "File uploaded successfully!")
-    h.node.DistributeFile(finalFilename)
+	h.node.DistributeFile(finalFilename)
 
-    // Respond to the client indicating success
-    fmt.Fprintln(w, "File distributed to peers!")
+	// Respond to the client indicating success
+	fmt.Fprintln(w, "File distributed to peers!")
 }
 
 func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
-    hash := r.URL.Query().Get("hash")
-    if hash == "" {
-        http.Error(w, "Hash parameter is required", http.StatusBadRequest)
-        return
-    }
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		http.Error(w, "Hash parameter is required", http.StatusBadRequest)
+		return
+	}
 
-    // Try to open the file locally first
-    // TODO: use the shards, not the hash
-    // TODO: refactor to not use hardcoded path
-    file, err := os.Open(filepath.Join("out", hash))
-    if err != nil {
-        if os.IsNotExist(err) {
-            // File not found locally, try to get it from peers
-            err = h.node.RequestFileFromPeers(hash)
-            if err != nil {
-                http.Error(w, "File not found in network", http.StatusNotFound)
-                return
-            }
-            // Now try to open the file again
-            file, err = os.Open(filepath.Join("out", hash))
-            if err != nil {
-                http.Error(w, "Error opening file after retrieval", http.StatusInternalServerError)
-                return
-            }
-        } else {
-            http.Error(w, "Error opening file", http.StatusInternalServerError)
-            return
-        }
-    }
-    defer file.Close()
+	// Try to open the file locally first
+	// TODO: use the shards, not the hash
+	// TODO: refactor to not use hardcoded path
+	// TODO: refactor nesting
+	file, err := os.Open(filepath.Join("out", hash))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File not found locally, try to get it from peers
+			err = h.node.RequestFileFromPeers(hash)
+			if err != nil {
+				http.Error(w, "File not found in network", http.StatusNotFound)
+				return
+			}
+			// Now try to open the file again
+			file, err = os.Open(filepath.Join("out", hash))
+			if err != nil {
+				http.Error(w, "Error opening file after retrieval", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			http.Error(w, "Error opening file", http.StatusInternalServerError)
+			return
+		}
+	}
+	defer file.Close()
 
-    // Set content type header to application/octet-stream for binary file download
-    w.Header().Set("Content-Type", "application/octet-stream")
-    w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", hash))
+	// Set content type header to application/octet-stream for binary file download
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", hash))
 
-    // Copy the file to the response writer
-    _, err = io.Copy(w, file)
-    if err != nil {
-        http.Error(w, "Error sending file", http.StatusInternalServerError)
-        return
-    }
+	// Copy the file to the response writer
+	_, err = io.Copy(w, file)
+	if err != nil {
+		http.Error(w, "Error sending file", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) GetShardMap(w http.ResponseWriter, r *http.Request) {
+    hostname, _ := os.Hostname()
+    
+    fmt.Println("Hostname:", hostname)
+    fmt.Printf("ShardMap request with from %s\n", r.RemoteAddr)
+    fmt.Printf("Headers: %+v\n", r.Header)  // Print all headers
+    fmt.Printf("User-Agent: %s\n", r.Header.Get("User-Agent"))
+    fmt.Printf("Referer: %s\n", r.Header.Get("Referer"))
+    
+    w.Header().Set("Content-Type", "text/plain")
+    w.WriteHeader(http.StatusOK)
+    h.node.PrintShardsMap()
 }
 
 func (h *Handler) HealthHandler(w http.ResponseWriter, _ *http.Request) {
-    w.Header().Set("Content-Type", "text/plain")
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("OK"))
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }

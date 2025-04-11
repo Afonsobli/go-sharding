@@ -11,9 +11,9 @@ import (
 const ShardSize = 1 * 1024 * 1024 // 1MB per shard
 
 type Shard struct {
-	Index            int
-	Hash             string
-	Size             int64
+	Index int
+	Hash  string
+	Size  int64
 }
 
 // TODO: Refactor other parts of the code to use this function
@@ -91,27 +91,27 @@ func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error 
 	outputPath = filepath.Join(outputDir, outputPath)
 	fmt.Println("outputPath", outputPath)
 
-    outFile, err := os.Create(outputPath)
-    if err != nil {
-        return fmt.Errorf("failed to create output file: %v", err)
-    }
-    defer outFile.Close()
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %v", err)
+	}
+	defer outFile.Close()
 
 	fmt.Println("shards", shards)
-    for _, shard := range shards {
-        shardFile, err := os.Open(filepath.Join(shardsDir, shard.Hash))
-        if err != nil {
-            return fmt.Errorf("failed to open shard %d: %v", shard.Index, err)
-        }
-        
-        // Copy only the actual size of the shard
-		fmt.Printf("Copying shard %d and size %d\n", shard.Index, shard.Size)
-        _, err = io.CopyN(outFile, shardFile, shard.Size)
-        shardFile.Close()
-        if err != nil {
-            return fmt.Errorf("failed to write shard %d: %v", shard.Index, err)
-        }
-    }
+	for _, shard := range shards {
+		shardFile, err := os.Open(filepath.Join(shardsDir, shard.Hash))
+		if err != nil {
+			return fmt.Errorf("failed to open shard %d: %v", shard.Index, err)
+		}
 
-    return nil
+		// Copy only the actual size of the shard
+		fmt.Printf("Copying shard %d and size %d\n", shard.Index, shard.Size)
+		_, err = io.CopyN(outFile, shardFile, shard.Size)
+		shardFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write shard %d: %v", shard.Index, err)
+		}
+	}
+
+	return nil
 }

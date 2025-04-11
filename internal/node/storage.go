@@ -21,7 +21,6 @@ func (n *P2PNode) downloadShardFile(shardPath string, reader *bufio.Reader) (sha
 
 func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
 	fmt.Println("Received file:", filename)
-	fmt.Println("Created:", n.shardsDir)
 
 	// Create and write to file
 	file, byteSize, err := n.createAndWriteFile(filename, reader)
@@ -31,12 +30,7 @@ func (n *P2PNode) handleFileUpload(reader *bufio.Reader, filename string) {
 	}
 	defer file.Close()
 
-	// Update shards map if this is a shard file
-	// TODO: Change the detection method
-	// Check for dot followed by a number (e.g., ".1", ".2", etc.)
-	if matched, _ := filepath.Match("*.[0-9]*", filename); matched {
-		n.updateShardMetadata(filename, byteSize)
-	}
+	n.updateShardMetadata(filename, byteSize)
 }
 
 func (n *P2PNode) createAndWriteFile(filename string, reader *bufio.Reader) (*os.File, int64, error) {
@@ -47,6 +41,7 @@ func (n *P2PNode) createAndWriteFile(filename string, reader *bufio.Reader) (*os
 	if err := os.MkdirAll(n.shardsDir, 0755); err != nil {
 		return nil, 0, fmt.Errorf("error creating directory: %v", err)
 	}
+	fmt.Println("Created:", n.shardsDir)
 		
 	file, err := os.Create(filepath.Join(n.shardsDir, filename))
 	if err != nil {

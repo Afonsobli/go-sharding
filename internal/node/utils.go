@@ -1,16 +1,25 @@
 package node
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
+
+func (n *P2PNode) PrintShardsMap() {
+	n.printShardsMap()
+}
 
 // TODO: This is not perfect as we are using goroutines which also print outputs
 func (n *P2PNode) printShardsMap() {
-	fmt.Println("Shards map ----------------")
-	for shard, shards := range n.shardMap {
-		fmt.Println("shard:", shard)
-		for _, shard := range shards {
-			fmt.Println("shard.Index:", shard.Index)
-			fmt.Println("shard.Hash:", shard.Hash)
+	hostname, _ := os.Hostname()
+	fmt.Printf("Shards map from %s ===========================\n", hostname)
+	for shardHash, shards := range n.shardMap {
+		fmt.Printf("💠 shard: %s +++++++++++++++++++++++\n", shardHash)
+		for _, shardInfo := range shards {
+			fmt.Println("\tshardInfo.Index:", shardInfo.Index)
+			fmt.Println("\tshardInfo.Hash:", shardInfo.Hash)
+			fmt.Println("\t---------------------------")
 		}
 	}
-	fmt.Println("---------------------------")
+	fmt.Println("=====================================")
 }

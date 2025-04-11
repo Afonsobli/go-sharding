@@ -17,15 +17,19 @@ import (
 )
 
 type P2PNode struct {
-	ID        peer.ID
-	Addr      string
-	host      host.Host
-	peerAddrs map[peer.ID]multiaddr.Multiaddr
-	shardsDir string // Where shards are stored
-	destDir   string // Where files are stored
-	shardMap  map[string][]sharding.Shard
-	peerLock  sync.Mutex
+	ID   peer.ID
+	Addr string
+	host host.Host
+
+	destDir string // Where files are stored
+
 	connected map[peer.ID]bool
+	peerAddrs map[peer.ID]multiaddr.Multiaddr
+	peerLock  sync.Mutex
+
+	shardsDir     string // Where shards are stored
+	shardMap      map[string][]sharding.Shard
+	shardMapMutex sync.RWMutex
 }
 
 // New creates a new P2P node

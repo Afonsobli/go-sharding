@@ -17,6 +17,8 @@ clean:
     rm -rf get/
 
 e2e:
+    docker-compose -f docker-compose.yml -f docker-compose.test.yml down
     docker system prune -af
-    ./docker_test_runner.sh
+    docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm test
+
     

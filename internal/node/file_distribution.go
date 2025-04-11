@@ -18,14 +18,20 @@ func (n *P2PNode) DistributeFile(filePath string) {
 		return
 	}
 
+	n.shardMapMutex.Lock()
 	// Store shard information
 	n.shardMap[filePath] = shards
-
+	n.shardMapMutex.Unlock()
+	
 	n.distributeShards(shards)
 }
 
 func (n *P2PNode) distributeShards(shards []sharding.Shard) {
 	peerList := make([]peer.ID, 0, len(n.peerAddrs))
+	if len(n.peerAddrs) == 0 {
+		fmt.Println("No peers available to distribute shards")
+		return
+	}
 	for peerID := range n.peerAddrs {
 		peerList = append(peerList, peerID)
 	}

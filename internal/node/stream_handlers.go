@@ -92,13 +92,14 @@ func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 	firstLine = strings.TrimSpace(firstLine)
 
 	// Route to appropriate handler based on request type
+	// TODO: Add better routing
 	if strings.HasPrefix(firstLine, "GET ") {
 		filename := strings.TrimPrefix(firstLine, "GET ")
 		n.handleGetRequest(stream, filename)
 	} else {
 		n.handleFileUpload(reader, firstLine)
 	}
-	fmt.Printf("Handled request: %s from peer: %s", firstLine, stream.Conn().RemotePeer())
+	fmt.Printf("Handled request: %s from peer: %s\n", firstLine, stream.Conn().RemotePeer())
 }
 
 func (n *P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {

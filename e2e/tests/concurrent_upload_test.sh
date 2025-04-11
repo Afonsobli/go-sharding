@@ -9,7 +9,7 @@ echo "Waiting for peer services to start..."
 sleep 3
 
 echo "Creating test files..."
-# Create 5 files of different sizes
+# Create 6 files of different sizes
 dd if=/dev/urandom of=./$TEST_FOLDER/file1.txt bs=512k count=1 2>/dev/null
 dd if=/dev/urandom of=./$TEST_FOLDER/file2.txt bs=1M count=2 2>/dev/null
 dd if=/dev/urandom of=./$TEST_FOLDER/file3.txt bs=2M count=1 2>/dev/null
@@ -41,7 +41,7 @@ done
 
 # Wait for files to propagate
 echo "Waiting for files to propagate..."
-sleep 10
+sleep 2
 
 # Verify all files can be retrieved from peer2 and peer3
 FAILURES=0

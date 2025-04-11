@@ -1,0 +1,19 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      peer1:
+        condition: service_healthy
+      peer2:
+        condition: service_healthy
+      peer3:
+        condition: service_healthy
+    volumes:
+      - ./test_data:/test_data
+
+volumes:
+  peer1_data:
+  peer2_data:
+  peer3_data:
