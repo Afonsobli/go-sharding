@@ -46,7 +46,6 @@ func (n *P2PNode) updateShardMetadata(filename string, byteSize int64) {
 	}
 
 	// Add to shards map
-	// TODO: Check if locking is necessary here
 	n.shardMapMutex.Lock()
 	shards, exists := n.shardMap[originalFile]
 	if !exists {

@@ -55,10 +55,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintln(w, "File uploaded successfully!")
-	h.node.DistributeFile(finalFilename)
-
-	// Respond to the client indicating success
-	fmt.Fprintln(w, "File distributed to peers!")
+	go func() {
+		h.node.DistributeFile(finalFilename)
+		// Respond to the client indicating success
+		fmt.Fprintln(w, "File distributed to peers!")
+	}()
 }
 
 func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +118,7 @@ func (h *Handler) GetShardMap(w http.ResponseWriter, r *http.Request) {
     
     w.Header().Set("Content-Type", "text/plain")
     w.WriteHeader(http.StatusOK)
-    h.node.PrintShardsMap()
+    go h.node.PrintShardsMap()
 }
 
 func (h *Handler) HealthHandler(w http.ResponseWriter, _ *http.Request) {
