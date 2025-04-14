@@ -6,7 +6,7 @@ TEST_FOLDER="concurrent_uploads_test"
 mkdir -p ./$TEST_FOLDER
 
 echo "Waiting for peer services to start..."
-sleep 3
+sleep 2
 
 echo "Creating test files..."
 # Create 6 files of different sizes

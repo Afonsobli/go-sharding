@@ -6,7 +6,7 @@ mkdir -p ./$TEST_FOLDER
 
 # Wait for services to be ready
 echo "Waiting for peer services to start..."
-sleep 3  # Give the peers some time to start and connect
+sleep 2 
 
 echo "Creating 10.5MB test file..."
 # Generate 10.5MB file (10.5 * 1024 * 1024 = 11010048 bytes)
@@ -27,7 +27,7 @@ echo "File hash: $FILE_HASH"
 
 # Give some time for the file to propagate to other peers
 echo "Waiting for file to propagate to other peers..."
-sleep 3  # Slightly longer sleep time as larger files take more time
+sleep 2 
 
 # Try to fetch the file from peer2
 echo "Fetching file from peer2..."

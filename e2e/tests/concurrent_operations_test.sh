@@ -9,19 +9,12 @@ echo "Running from container: $(hostname)"
 HOSTNAME=$(hostname)
 echo "Debug - Current hostname: $HOSTNAME"
 
-# Helper function to format milliseconds
-format_ms() {
-  local time_in_seconds=$1
-  local ms=$(echo "$time_in_seconds * 1000" | bc)
-  printf "%.2f" $ms
-}
-
 # Create test data directory
 TEST_FOLDER="concurrent_operations_test"
 mkdir -p ./$TEST_FOLDER
 
 echo "Waiting for peer services to start..."
-sleep 3
+sleep 2
 
 echo "Creating test files..."
 # Create a mix of small and large files
@@ -40,7 +33,7 @@ done
 
 #Test 1: Measure time for sequential uploads
 echo "=== Test 1: Sequential Uploads ==="
-SEQ_START=$(date +%s.%N)
+SEQ_START=$(date +%s)
 
 for file in ./$TEST_FOLDER/*.txt; do
   BASENAME=$(basename "$file")
@@ -48,15 +41,14 @@ for file in ./$TEST_FOLDER/*.txt; do
   curl -s -F "file=@$file" http://peer1:8080/upload > ./$TEST_FOLDER/${BASENAME}.seq_response
 done
 
-SEQ_END=$(date +%s.%N)
-SEQ_TIME=$(echo "$SEQ_END - $SEQ_START" | bc)
-SEQ_TIME_MS=$(format_ms $SEQ_TIME)
-echo "Sequential upload time: $SEQ_TIME_MS ms"
+SEQ_END=$(date +%s)
+SEQ_TIME=$((SEQ_END - SEQ_START))
+echo "Sequential upload time: $SEQ_TIME seconds"
 
 # Test 2: Measure time for concurrent uploads
 echo "=== Test 2: Concurrent Uploads ==="
 curl -s "http://peer1:8080/shardMap"
-CONC_START=$(date +%s.%N)
+CONC_START=$(date +%s)
 
 # Upload all files concurrently
 for file in ./$TEST_FOLDER/*.txt; do
@@ -67,14 +59,13 @@ done
 
 # Wait for all uploads to complete
 wait
-CONC_END=$(date +%s.%N)
-CONC_TIME=$(echo "$CONC_END - $CONC_START" | bc)
-CONC_TIME_MS=$(format_ms $CONC_TIME)
-echo "Concurrent upload time: $CONC_TIME_MS ms"
+CONC_END=$(date +%s)
+CONC_TIME=$((CONC_END - CONC_START))
+echo "Concurrent upload time: $CONC_TIME seconds"
 
 # Calculate speedup - handle the case where concurrent time is too small
-if (( $(echo "$CONC_TIME > 0.001" | bc -l) )); then
-  SPEEDUP=$(echo "$SEQ_TIME / $CONC_TIME" | bc -l)
+if [ $CONC_TIME -gt 0 ]; then
+  SPEEDUP=$(echo "scale=2; $SEQ_TIME / $CONC_TIME" | bc -l)
   printf "Speedup from concurrency: %.2fx\n" $SPEEDUP
 else
   echo "Concurrent uploads completed too quickly to measure accurate speedup"
@@ -83,9 +74,7 @@ fi
 
 # Wait for files to propagate
 echo "Waiting for files to propagate..."
-echo "Shard map after upload"
-curl -s "http://peer1:8080/shardMap"
-sleep 5
+sleep 2
 
 # Test 3: Concurrent Downloads - simultaneously download from different peers
 echo "=== Test 3: Concurrent Downloads ==="
@@ -100,7 +89,7 @@ for file in ./$TEST_FOLDER/*.txt; do
 done
 
 # Start concurrent downloads from different peers
-DL_START=$(date +%s.%N)
+DL_START=$(date +%s)
 
 for hash in "${HASHES[@]}"; do
   # Download some files from peer2, some from peer3 to test load distribution
@@ -115,10 +104,9 @@ done
 
 # Wait for all downloads to complete
 wait
-DL_END=$(date +%s.%N)
-DL_TIME=$(echo "$DL_END - $DL_START" | bc)
-DL_TIME_MS=$(format_ms $DL_TIME)
-echo "Concurrent download time: $DL_TIME_MS ms"
+DL_END=$(date +%s)
+DL_TIME=$((DL_END - DL_START))
+echo "Concurrent download time: $DL_TIME seconds"
 
 # Test 4: Concurrent Mixed Operations
 echo "=== Test 4: Concurrent Mixed Operations ==="
@@ -133,7 +121,7 @@ for i in {1..3}; do
   sha256sum ./$TEST_FOLDER/mixed$i.txt > ./$TEST_FOLDER/mixed${i}.hash
 done
 
-MIXED_START=$(date +%s.%N)
+MIXED_START=$(date +%s)
 
 # Start a mix of uploads and downloads concurrently
 # Upload new files
@@ -150,14 +138,13 @@ done
 
 # Wait for all operations to complete
 wait
-MIXED_END=$(date +%s.%N)
-MIXED_TIME=$(echo "$MIXED_END - $MIXED_START" | bc)
-MIXED_TIME_MS=$(format_ms $MIXED_TIME)
-echo "Concurrent mixed operations time: $MIXED_TIME_MS ms"
+MIXED_END=$(date +%s)
+MIXED_TIME=$((MIXED_END - MIXED_START))
+echo "Concurrent mixed operations time: $MIXED_TIME seconds"
 
 # Wait for mixed files to propagate
 echo "Waiting for mixed files to propagate..."
-sleep 3  # Give enough time for propagation
+sleep 2
 
 # Verify data integrity
 echo "=== Verifying Data Integrity ==="
@@ -225,10 +212,10 @@ done
 
 # Summary
 echo "=== Test Results ==="
-echo "Sequential upload time: $SEQ_TIME_MS ms"
-echo "Concurrent upload time: $CONC_TIME_MS ms"
-echo "Concurrent download time: $DL_TIME_MS ms"
-echo "Concurrent mixed operations time: $MIXED_TIME_MS ms"
+echo "Sequential upload time: $SEQ_TIME seconds"
+echo "Concurrent upload time: $CONC_TIME seconds"
+echo "Concurrent download time: $DL_TIME seconds"
+echo "Concurrent mixed operations time: $MIXED_TIME seconds"
 
 if [[ "$SPEEDUP" == "N/A"* ]]; then
   echo "Concurrency speedup: $SPEEDUP"

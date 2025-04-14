@@ -104,7 +104,7 @@ func SplitFile(filePath string, shardsDir string) ([]Shard, error) {
 // calculateNumberOfShards determines how many shards are needed for the given file size
 func calculateNumberOfShards(fileSize int64) int64 {
 	// Round up division
-	return (fileSize + ShardSize - 1) / ShardSize 
+	return (fileSize + ShardSize - 1) / ShardSize
 }
 
 // processShards handles the parallel processing of file shards
@@ -198,31 +198,59 @@ func buildShardPath(shardsDir string, filePath string, idx int64) string {
 // MergeShards combines multiple shards back into the original file
 func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error {
 	fmt.Println("Merging Shards...")
-	err := os.MkdirAll(outputDir, 0755)
-	if err != nil {
-		return fmt.Errorf("failed to create output directory: %v", err)
+
+	// Create merge context to hold all relevant data
+	ctx := &MergeContext{
+		Shards:     shards,
+		OutputDir:  outputDir,
+		ShardsDir:  shardsDir,
+		OutputPath: outputPath,
 	}
-	fmt.Println("Created outputDir", outputDir)
 
-	outputPath = filepath.Join(outputDir, outputPath)
-	fmt.Println("outputPath", outputPath)
-
-	outFile, err := os.Create(outputPath)
+	// Prepare output directory and file
+	outFile, err := prepareOutputFile(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %v", err)
+		return err
 	}
 	defer outFile.Close()
 
-	// Sort shards by index to ensure correct order
-	sorted := SortShards(shards)
-	fmt.Println("shards", sorted)
+	// Sort shards and read them in parallel
+	sortedShards := SortShards(ctx.Shards)
+	shardBuffers, err := loadShardContents(sortedShards, ctx.ShardsDir)
+	if err != nil {
+		return err
+	}
 
-	// Load shards in parallel but write sequentially to maintain file integrity
+	// Write the shards to the output file
+	return writeShardBuffers(outFile, sortedShards, shardBuffers)
+}
+
+// prepareOutputFile creates the output directory and file
+func prepareOutputFile(ctx *MergeContext) (*os.File, error) {
+	err := os.MkdirAll(ctx.OutputDir, 0755)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %v", err)
+	}
+	fmt.Println("Created outputDir", ctx.OutputDir)
+
+	fullOutputPath := filepath.Join(ctx.OutputDir, ctx.OutputPath)
+	fmt.Println("outputPath", fullOutputPath)
+
+	outFile, err := os.Create(fullOutputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create output file: %v", err)
+	}
+
+	return outFile, nil
+}
+
+// loadShardContents reads all shard contents into memory in parallel
+func loadShardContents(shards []Shard, shardsDir string) ([][]byte, error) {
 	var wg sync.WaitGroup
-	shardBuffers := make([][]byte, len(sorted))
-	errChan := make(chan error, len(sorted))
+	shardBuffers := make([][]byte, len(shards))
+	errChan := make(chan error, len(shards))
 
-	for i, shard := range sorted {
+	for i, shard := range shards {
 		wg.Add(1)
 		go func(idx int, s Shard) {
 			defer wg.Done()
@@ -243,18 +271,21 @@ func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error 
 	// Check for errors
 	for err := range errChan {
 		if err != nil {
-			return err
+			return nil, err
 		}
-		}
+	}
 
-	// Write shards sequentially to output file
-	for i, shard := range sorted {
+	return shardBuffers, nil
+}
+
+// writeShardBuffers writes the shard buffers to the output file in order
+func writeShardBuffers(outFile *os.File, shards []Shard, shardBuffers [][]byte) error {
+	for i, shard := range shards {
 		fmt.Printf("Writing shard %d and size %d\n", shard.Index, shard.Size)
-		_, err = outFile.Write(shardBuffers[i])
+		_, err := outFile.Write(shardBuffers[i])
 		if err != nil {
 			return fmt.Errorf("failed to write shard %d: %v", shard.Index, err)
 		}
 	}
-
 	return nil
 }
