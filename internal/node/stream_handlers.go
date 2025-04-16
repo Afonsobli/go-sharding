@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"shard/internal/sharding"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,6 +80,54 @@ func (n *P2PNode) requestShardFromPeer(peerID peer.ID, shardPath string) (shardi
 	return n.downloadShardFile(shardPath, reader)
 }
 
+func (n *P2PNode) requestMaxIndexOfShard(peerID peer.ID, shardPath string) (int, error) {
+	// Timeout to stream creation
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// Create stream to peer
+	stream, err := n.host.NewStream(ctx, peerID, "/file/1.0.0")
+	if err != nil {
+		return -1, fmt.Errorf("failed to create stream: %v", err)
+	}
+	defer stream.Close()
+
+	fmt.Println("requesting max index of shard", shardPath)
+
+	if err := n.sendMaxIndexRequest(stream, shardPath); err != nil {
+		return -1, err
+	}
+
+	reader := bufio.NewReader(stream)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return -1, fmt.Errorf("failed to read response: %v", err)
+	}
+	fmt.Println("response", response)
+	if strings.TrimSpace(response) != "OK" {
+		return -1, fmt.Errorf("peer does not have shard, could not receive max index")
+	}
+
+	// Read the max index
+	maxIndexStr, err := reader.ReadString('\n')
+	if err != nil {
+		return -1, fmt.Errorf("failed to read max index: %v", err)
+	}
+
+	fmt.Println("max index string", maxIndexStr)
+
+	maxIndexStr = strings.TrimSpace(maxIndexStr)
+	maxIndex, err := strconv.Atoi(maxIndexStr)
+	if err != nil {
+		return -1, fmt.Errorf("failed to convert max index to int: %v", err)
+	}
+	return maxIndex, nil
+}
+
+const (
+	requestTypeGet      = "GET"
+	requestTypeMaxIndex = "MAX_INDEX"
+)
+
 func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 	defer stream.Close()
 
@@ -89,21 +138,34 @@ func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 		fmt.Printf("Error reading request: %v\n", err)
 		return
 	}
+	fmt.Println("FirstLine", firstLine)
 	firstLine = strings.TrimSpace(firstLine)
 
-	// Route to appropriate handler based on request type
-	// TODO: Add better routing
-	if strings.HasPrefix(firstLine, "GET ") {
-		filename := strings.TrimPrefix(firstLine, "GET ")
-		n.handleGetRequest(stream, filename)
-	} else {
+	parts := strings.SplitN(firstLine, " ", 2)
+	if len(parts) < 2 {
+		fmt.Println("Invalid request format")
+		return
+	}
+
+	requestType := parts[0]
+	payload := parts[1]
+
+	switch requestType {
+	case requestTypeGet:
+		n.handleGetRequest(stream, payload)
+	case requestTypeMaxIndex:
+		n.handleMaxIndexRequest(stream, payload)
+	default:
 		n.handleFileUpload(reader, firstLine)
 	}
-	fmt.Printf("Handled request: %s from peer: %s\n", firstLine, stream.Conn().RemotePeer())
+
+	fmt.Printf("Handled %s request from peer: %s\n", requestType, stream.Conn().RemotePeer())
 }
 
+// Update the send request function to match the new format
 func (n *P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
-	_, err := stream.Write([]byte("GET " + shardPath + "\n"))
+	fmt.Print("Sending GET request for shard:", requestTypeGet + " " + shardPath + "\n")
+	_, err := stream.Write([]byte(requestTypeGet + " " + shardPath + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send request: %v", err)
 	}
@@ -131,5 +193,35 @@ func (n *P2PNode) handleGetRequest(stream network.Stream, filename string) {
 	_, err = io.Copy(stream, file)
 	if err != nil {
 		fmt.Printf("Error sending file: %v\n", err)
+	}
+}
+
+// sendMaxIndexRequest sends a request to a peer to get the maximum index of a shard
+func (n *P2PNode) sendMaxIndexRequest(stream network.Stream, shardHash string) error {
+	fmt.Print("Sending MaxIndex request for shard:", requestTypeMaxIndex + " " + shardHash + "\n")
+	_, err := stream.Write([]byte(requestTypeMaxIndex + " " + shardHash + "\n"))
+	if err != nil {
+		return fmt.Errorf("failed to send max index request: %v", err)
+	}
+	return nil
+}
+
+// handleMaxIndexRequest handles incoming requests for the maximum index of a shard
+func (n *P2PNode) handleMaxIndexRequest(stream network.Stream, shardHash string) {
+	maxIndex := n.getMaxShardIndex(shardHash)
+	if maxIndex == -1 {
+		fmt.Println("While handling, no shards were found for hash:", shardHash)
+		stream.Write([]byte("NOT FOUND\n"))
+		return
+	}
+	// Send OK response
+	_, err := stream.Write([]byte("OK\n"))
+	if err != nil {
+		fmt.Printf("Error sending OK response: %v\n", err)
+		return
+	}
+	_, err = stream.Write([]byte(fmt.Sprintf("%d\n", maxIndex)))
+	if err != nil {
+		fmt.Printf("Error sending max index response: %v\n", err)
 	}
 }

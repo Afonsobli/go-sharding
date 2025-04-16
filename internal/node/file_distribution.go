@@ -18,6 +18,7 @@ func (n *P2PNode) DistributeFile(filePath string) {
 		return
 	}
 
+	// TODO: use shard manager
 	n.shardMapMutex.Lock()
 	// Store shard information
 	n.shardMap[filePath] = shards

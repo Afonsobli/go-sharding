@@ -15,6 +15,7 @@ func (n *P2PNode) RequestFileFromPeers(hash string) error {
 	if err != nil {
 		return fmt.Errorf("failed to retrieve missing shards: %v", err)
 	}
+	// TODO: use shard manager
 	sortedShards := sharding.SortShards(n.shardMap[hash])
 	fmt.Println("sortedShards:", sortedShards)
 
@@ -28,9 +29,11 @@ func (n *P2PNode) RequestFileFromPeers(hash string) error {
 }
 
 func (n *P2PNode) missingShards(hash string) error {
+	// TODO: use shard manager
 	_, exists := n.shardMap[hash]
 	if !exists {
 		// If we don't have shard information, initialize shard discovery
+		// TODO: use shard manager
 		fmt.Println("No shard info found, initializing empty entry and attempting discovery")
 		n.shardMapMutex.Lock()
 		n.shardMap[hash] = []sharding.Shard{}
@@ -41,6 +44,7 @@ func (n *P2PNode) missingShards(hash string) error {
 	n.requestMissingShards(hash)
 
 	// Verify we found at least one shard
+	// TODO: use shard manager
 	if len(n.shardMap[hash]) == 0 {
 		return fmt.Errorf("failed to find any shards for file %s", hash)
 	}
@@ -49,14 +53,15 @@ func (n *P2PNode) missingShards(hash string) error {
 
 func (n *P2PNode) requestMissingShards(hash string) {
 	fmt.Println("Requesting missing shards")
-	// TODO: This has a problem, it will request shards until an error is thrown
-	// If a retrival fails, it will not try to retrieve the next shard
-	// This is a temporary solution
-	i := 0
-	for {
+	maxIndex, err := n.discoverMaxIndexOfHash(hash)
+	if err != nil {
+		fmt.Printf("Error discovering max index of hash %s: %v\n", hash, err)
+		return
+	}
+	for i := range maxIndex + 1 {
+		// TODO: use shard manager
 		if hasShardIndex(n.shardMap[hash], i) {
 			fmt.Printf("Already have shard %d, skipping\n", i)
-			i++
 			continue
 		}
 
@@ -65,18 +70,45 @@ func (n *P2PNode) requestMissingShards(hash string) {
 		if err != nil {
 			break
 		}
+
+		// TODO: use shard manager
 		n.shardMapMutex.Lock()
 		n.shardMap[hash] = append(n.shardMap[hash], shard)
 		n.shardMapMutex.Unlock()
-		i++
 	}
+}
+
+func (n *P2PNode) discoverMaxIndexOfHash(shardHash string) (int, error) {
+	fmt.Println("Requesting max index of shard", shardHash)
+	maxIndex := -1
+	for peerID := range n.peerAddrs {
+		fmt.Println("requesting max index from peer id", peerID)
+
+		index, err := n.requestMaxIndexOfShard(peerID, shardHash)
+		if err != nil {
+			fmt.Printf("Peer %s couldn't provide shard's max index: %v\n", peerID, err)
+			continue
+		}
+		fmt.Printf("Peer %s provided shard's max index: %d\n", peerID, index)
+		fmt.Printf("index (%d) > maxIndex (%d)\n", index, maxIndex)
+		if index > maxIndex {
+			fmt.Println("updating max index")
+			maxIndex = index
+		}
+	}
+	if maxIndex == -1 {
+		fmt.Println("shard not found in any peer")
+		return -1, fmt.Errorf("shard not found in any peer")
+	}
+	fmt.Printf("Max index of shard %s is %d\n", shardHash, maxIndex)
+	return maxIndex, nil
 }
 
 func (n *P2PNode) requestSingleShard(shardHash string) (sharding.Shard, error) {
 	fmt.Println("Requesting shard", shardHash)
 	fmt.Println("peer ids known", n.peerAddrs)
 	for peerID := range n.peerAddrs {
-		fmt.Println("requesting peer id", peerID)
+		fmt.Println("requesting single shard from peer id", peerID)
 
 		shard, err := n.requestShardFromPeer(peerID, shardHash)
 		if err == nil {

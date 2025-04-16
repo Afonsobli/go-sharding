@@ -62,3 +62,25 @@ func (n *P2PNode) updateShardMetadata(filename string, byteSize int64) {
 
 	fmt.Printf("Updated shards map for file %s with shard %s\n", originalFile, shardIndex)
 }
+
+// getMaxShardIndex returns the highest shard index for a given file hash
+func (n *P2PNode) getMaxShardIndex(hash string) int {
+	n.shardMapMutex.RLock()
+	defer n.shardMapMutex.RUnlock()
+
+	maxIndex := -1
+	shards, exists := n.shardMap[hash]
+	if !exists || len(shards) == 0 {
+		return maxIndex // No shards available
+	}
+
+	for _, shard := range shards {
+		if shard.Index > maxIndex {
+			maxIndex = shard.Index
+		}
+	}
+
+	fmt.Println("My max index for hash", hash, "is", maxIndex)
+
+	return maxIndex
+}
