@@ -35,7 +35,7 @@ func (n *P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
 
 	// First send the shard name
 	shardName := []byte(filepath.Base(shardPath) + "\n")
-	_, err = stream.Write(shardName)
+	_, err = stream.Write([]byte(requestTypeUpload + " " + string(shardName) + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send shard name: %v", err)
 	}
@@ -124,6 +124,7 @@ func (n *P2PNode) requestMaxIndexOfShard(peerID peer.ID, shardPath string) (int,
 }
 
 const (
+	requestTypeUpload   = "SHARD"
 	requestTypeGet      = "GET"
 	requestTypeMaxIndex = "MAX_INDEX"
 )
@@ -164,7 +165,7 @@ func (n *P2PNode) handleIncomingRequest(stream network.Stream) {
 
 // Update the send request function to match the new format
 func (n *P2PNode) sendGetRequest(stream network.Stream, shardPath string) error {
-	fmt.Print("Sending GET request for shard:", requestTypeGet + " " + shardPath + "\n")
+	fmt.Print("Sending GET request for shard:", requestTypeGet+" "+shardPath+"\n")
 	_, err := stream.Write([]byte(requestTypeGet + " " + shardPath + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send request: %v", err)
@@ -198,7 +199,7 @@ func (n *P2PNode) handleGetRequest(stream network.Stream, filename string) {
 
 // sendMaxIndexRequest sends a request to a peer to get the maximum index of a shard
 func (n *P2PNode) sendMaxIndexRequest(stream network.Stream, shardHash string) error {
-	fmt.Print("Sending MaxIndex request for shard:", requestTypeMaxIndex + " " + shardHash + "\n")
+	fmt.Print("Sending MaxIndex request for shard:", requestTypeMaxIndex+" "+shardHash+"\n")
 	_, err := stream.Write([]byte(requestTypeMaxIndex + " " + shardHash + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send max index request: %v", err)
