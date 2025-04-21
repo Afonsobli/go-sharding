@@ -156,7 +156,8 @@ func processOneShard(job *ShardJob) error {
 		return err
 	}
 
-	shardPath := buildShardPath(ctx.ShardsDir, ctx.FilePath, idx)
+	shardHash := buildShardHash(ctx.FilePath, idx)
+	shardPath := filepath.Join(ctx.ShardsDir, shardHash)
 	err = os.WriteFile(shardPath, buffer, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write shard %d: %v", idx, err)
@@ -164,7 +165,7 @@ func processOneShard(job *ShardJob) error {
 
 	ctx.Shards[idx] = Shard{
 		Index: int(idx),
-		Hash:  shardPath,
+		Hash:  shardHash,
 		Size:  currentShardSize,
 	}
 
@@ -189,19 +190,19 @@ func readFileSegment(file *os.File, buffer []byte, offset int64, size int64, idx
 	return nil
 }
 
-// buildShardPath constructs the full path for a shard file
-func buildShardPath(shardsDir string, filePath string, idx int64) string {
-	return filepath.Join(shardsDir, fmt.Sprintf("%s.%d", filepath.Base(filePath), idx))
+// buildShardHash constructs the full hash for a shard file
+func buildShardHash(filePath string, idx int64) string {
+	return fmt.Sprintf("%s.%d", filepath.Base(filePath), idx)
 }
 
 // TODO: potentially has too many arguments
 // MergeShards combines multiple shards back into the original file
-func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error {
+func MergeShards(sortedShards []Shard, outputDir, shardsDir, outputPath string) error {
 	fmt.Println("Merging Shards...")
 
 	// Create merge context to hold all relevant data
 	ctx := &MergeContext{
-		Shards:     shards,
+		Shards:     sortedShards,
 		OutputDir:  outputDir,
 		ShardsDir:  shardsDir,
 		OutputPath: outputPath,
@@ -214,8 +215,6 @@ func MergeShards(shards []Shard, outputDir, shardsDir, outputPath string) error 
 	}
 	defer outFile.Close()
 
-	// Sort shards and read them in parallel
-	sortedShards := SortShards(ctx.Shards)
 	shardBuffers, err := loadShardContents(sortedShards, ctx.ShardsDir)
 	if err != nil {
 		return err
@@ -268,7 +267,6 @@ func loadShardContents(shards []Shard, shardsDir string) ([][]byte, error) {
 	wg.Wait()
 	close(errChan)
 
-	// Check for errors
 	for err := range errChan {
 		if err != nil {
 			return nil, err

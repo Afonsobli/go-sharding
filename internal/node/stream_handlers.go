@@ -16,8 +16,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-func (n *P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
+func (n *P2PNode) sendShardToPeer(shardHash string, peerID peer.ID) error {
 	fmt.Println("Sending shard to peers")
+
+	shardPath := filepath.Join(n.shardsDir, shardHash)
 
 	// Open the shardFile
 	shardFile, err := os.Open(shardPath)
@@ -34,7 +36,7 @@ func (n *P2PNode) sendShardToPeer(shardPath string, peerID peer.ID) error {
 	defer stream.Close()
 
 	// First send the shard name
-	shardName := []byte(filepath.Base(shardPath) + "\n")
+	shardName := []byte(shardHash+ "\n")
 	_, err = stream.Write([]byte(requestTypeUpload + " " + string(shardName) + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send shard name: %v", err)
