@@ -5,9 +5,6 @@ set -e
 TEST_FOLDER="concurrent_uploads_test"
 mkdir -p ./$TEST_FOLDER
 
-echo "Waiting for peer services to start..."
-sleep 2
-
 echo "Creating test files..."
 # Create 6 files of different sizes
 dd if=/dev/urandom of=./$TEST_FOLDER/file1.txt bs=512k count=1 2>/dev/null
@@ -38,10 +35,6 @@ for i in {1..6}; do
   echo "File $i hash: $FILE_HASH"
   echo $FILE_HASH > ./$TEST_FOLDER/hash$i.txt
 done
-
-# Wait for files to propagate
-echo "Waiting for files to propagate..."
-sleep 2
 
 # Verify all files can be retrieved from peer2 and peer3
 FAILURES=0

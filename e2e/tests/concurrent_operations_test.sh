@@ -13,9 +13,6 @@ echo "Debug - Current hostname: $HOSTNAME"
 TEST_FOLDER="concurrent_operations_test"
 mkdir -p ./$TEST_FOLDER
 
-echo "Waiting for peer services to start..."
-sleep 2
-
 echo "Creating test files..."
 # Create a mix of small and large files
 dd if=/dev/urandom of=./$TEST_FOLDER/small1.txt bs=100k count=1 2>/dev/null
@@ -33,48 +30,37 @@ done
 
 #Test 1: Measure time for sequential uploads
 echo "=== Test 1: Sequential Uploads ==="
-SEQ_START=$(date +%s)
+echo "Starting sequential uploads..."
 
-for file in ./$TEST_FOLDER/*.txt; do
-  BASENAME=$(basename "$file")
-  echo "Uploading $BASENAME sequentially..."
-  curl -s -F "file=@$file" http://peer1:8080/upload > ./$TEST_FOLDER/${BASENAME}.seq_response
-done
-
-SEQ_END=$(date +%s)
-SEQ_TIME=$((SEQ_END - SEQ_START))
-echo "Sequential upload time: $SEQ_TIME seconds"
+echo "Sequential upload time:"
+time (
+  for file in ./$TEST_FOLDER/*.txt; do
+    BASENAME=$(basename "$file")
+    echo "Uploading $BASENAME sequentially..."
+    curl -s -F "file=@$file" http://peer1:8080/upload > ./$TEST_FOLDER/${BASENAME}.seq_response
+  done
+)
 
 # Test 2: Measure time for concurrent uploads
 echo "=== Test 2: Concurrent Uploads ==="
 curl -s "http://peer1:8080/shardMap"
-CONC_START=$(date +%s)
+echo "Starting concurrent uploads..."
 
-# Upload all files concurrently
-for file in ./$TEST_FOLDER/*.txt; do
-  BASENAME=$(basename "$file")
-  echo "Starting upload of $BASENAME concurrently..."
-  curl -s -F "file=@$file" http://peer1:8080/upload > ./$TEST_FOLDER/${BASENAME}.conc_response &
-done
+echo "Concurrent upload time:"
+time (
+  # Upload all files concurrently
+  for file in ./$TEST_FOLDER/*.txt; do
+    BASENAME=$(basename "$file")
+    echo "Starting upload of $BASENAME concurrently..."
+    curl -s -F "file=@$file" http://peer1:8080/upload > ./$TEST_FOLDER/${BASENAME}.conc_response &
+  done
+  # Wait for all uploads to complete
+  wait
+)
 
-# Wait for all uploads to complete
-wait
-CONC_END=$(date +%s)
-CONC_TIME=$((CONC_END - CONC_START))
-echo "Concurrent upload time: $CONC_TIME seconds"
-
-# Calculate speedup - handle the case where concurrent time is too small
-if [ $CONC_TIME -gt 0 ]; then
-  SPEEDUP=$(echo "scale=2; $SEQ_TIME / $CONC_TIME" | bc -l)
-  printf "Speedup from concurrency: %.2fx\n" $SPEEDUP
-else
-  echo "Concurrent uploads completed too quickly to measure accurate speedup"
-  SPEEDUP="N/A - Too fast to measure"
-fi
-
-# Wait for files to propagate
-echo "Waiting for files to propagate..."
-sleep 2
+# Note: We can't calculate the exact speedup with this approach as we don't capture the values
+# But the output will still show the times clearly for manual comparison
+echo "Speedup from concurrency: Compare the real times above"
 
 # Test 3: Concurrent Downloads - simultaneously download from different peers
 echo "=== Test 3: Concurrent Downloads ==="
@@ -83,30 +69,32 @@ mkdir -p ./$TEST_FOLDER/downloads
 # Get list of all file hashes
 HASHES=()
 for file in ./$TEST_FOLDER/*.txt; do
+  # Skip any non-regular files or files generated during the test process
+  if [[ "$file" == *"time.txt"* ]] || [[ ! -f "$file" ]]; then
+    continue
+  fi
+  
   BASENAME=$(basename "$file")
   HASH=$(cat ./$TEST_FOLDER/${BASENAME}.hash | awk '{print $1}')
   HASHES+=("$HASH")
 done
 
-# Start concurrent downloads from different peers
-DL_START=$(date +%s)
-
-for hash in "${HASHES[@]}"; do
-  # Download some files from peer2, some from peer3 to test load distribution
-  if [ $(($RANDOM % 2)) -eq 0 ]; then
-    echo "Downloading $hash from peer2..."
-    curl -s "http://peer2:8080/file?hash=$hash" -o ./$TEST_FOLDER/downloads/${hash}_from_peer2 &
-  else
-    echo "Downloading $hash from peer3..."
-    curl -s "http://peer3:8080/file?hash=$hash" -o ./$TEST_FOLDER/downloads/${hash}_from_peer3 &
-  fi
-done
-
-# Wait for all downloads to complete
-wait
-DL_END=$(date +%s)
-DL_TIME=$((DL_END - DL_START))
-echo "Concurrent download time: $DL_TIME seconds"
+echo "Concurrent download time:"
+time (
+  # Start concurrent downloads from different peers
+  for hash in "${HASHES[@]}"; do
+    # Download some files from peer2, some from peer3 to test load distribution
+    if [ $(($RANDOM % 2)) -eq 0 ]; then
+      echo "Downloading $hash from peer2..."
+      curl -s "http://peer2:8080/file?hash=$hash" -o ./$TEST_FOLDER/downloads/${hash}_from_peer2 &
+    else
+      echo "Downloading $hash from peer3..."
+      curl -s "http://peer3:8080/file?hash=$hash" -o ./$TEST_FOLDER/downloads/${hash}_from_peer3 &
+    fi
+  done
+  # Wait for all downloads to complete
+  wait
+)
 
 # Test 4: Concurrent Mixed Operations
 echo "=== Test 4: Concurrent Mixed Operations ==="
@@ -121,30 +109,24 @@ for i in {1..3}; do
   sha256sum ./$TEST_FOLDER/mixed$i.txt > ./$TEST_FOLDER/mixed${i}.hash
 done
 
-MIXED_START=$(date +%s)
+echo "Concurrent mixed operations time:"
+time (
+  # Start a mix of uploads and downloads concurrently
+  # Upload new files
+  for i in {1..3}; do
+    echo "Uploading mixed$i.txt..."
+    curl -s -F "file=@./$TEST_FOLDER/mixed$i.txt" http://peer1:8080/upload > /dev/null &
+  done
 
-# Start a mix of uploads and downloads concurrently
-# Upload new files
-for i in {1..3}; do
-  echo "Uploading mixed$i.txt..."
-  curl -s -F "file=@./$TEST_FOLDER/mixed$i.txt" http://peer1:8080/upload > /dev/null &
-done
+  # Download previous files
+  for hash in "${HASHES[@]:0:3}"; do  # Just use first 3 hashes
+    echo "Downloading $hash during mixed operations..."
+    curl -s "http://peer2:8080/file?hash=$hash" -o /dev/null &
+  done
 
-# Download previous files
-for hash in "${HASHES[@]:0:3}"; do  # Just use first 3 hashes
-  echo "Downloading $hash during mixed operations..."
-  curl -s "http://peer2:8080/file?hash=$hash" -o /dev/null &
-done
-
-# Wait for all operations to complete
-wait
-MIXED_END=$(date +%s)
-MIXED_TIME=$((MIXED_END - MIXED_START))
-echo "Concurrent mixed operations time: $MIXED_TIME seconds"
-
-# Wait for mixed files to propagate
-echo "Waiting for mixed files to propagate..."
-sleep 2
+  # Wait for all operations to complete
+  wait
+)
 
 # Verify data integrity
 echo "=== Verifying Data Integrity ==="
@@ -186,42 +168,40 @@ done
 echo "Verifying mixed files..."
 for i in {1..3}; do
   MIXFILE="./$TEST_FOLDER/mixed$i.txt"
-  HASH=$(cat ./$TEST_FOLDER/mixed${i}.hash | awk '{print $1}')
-  
-  echo "Verifying mixed$i.txt (hash: $HASH)..."
-  
-  # Try to fetch from both peers
-  curl -s "http://peer2:8080/file?hash=$HASH" -o ./$TEST_FOLDER/verify_peer2_mixed${i}.txt
-  curl -s "http://peer3:8080/file?hash=$HASH" -o ./$TEST_FOLDER/verify_peer3_mixed${i}.txt
-  
-  # Verify integrity
-  if ! diff "$MIXFILE" ./$TEST_FOLDER/verify_peer2_mixed${i}.txt > /dev/null; then
-    echo "❌ File mixed$i.txt from peer2 doesn't match original"
-    FAILURES=$((FAILURES+1))
+  # Check if the hash file exists before trying to read it
+  if [[ -f "./$TEST_FOLDER/mixed${i}.hash" ]]; then
+    HASH=$(cat ./$TEST_FOLDER/mixed${i}.hash | awk '{print $1}')
+    
+    echo "Verifying mixed$i.txt (hash: $HASH)..."
+    
+    # Try to fetch from both peers
+    curl -s "http://peer2:8080/file?hash=$HASH" -o ./$TEST_FOLDER/verify_peer2_mixed${i}.txt
+    curl -s "http://peer3:8080/file?hash=$HASH" -o ./$TEST_FOLDER/verify_peer3_mixed${i}.txt
+    
+    # Verify integrity
+    if ! diff "$MIXFILE" ./$TEST_FOLDER/verify_peer2_mixed${i}.txt > /dev/null; then
+      echo "❌ File mixed$i.txt from peer2 doesn't match original"
+      FAILURES=$((FAILURES+1))
+    else
+      echo "✅ File mixed$i.txt verified on peer2"
+    fi
+    
+    if ! diff "$MIXFILE" ./$TEST_FOLDER/verify_peer3_mixed${i}.txt > /dev/null; then
+      echo "❌ File mixed$i.txt from peer3 doesn't match original"
+      FAILURES=$((FAILURES+1))
+    else
+      echo "✅ File mixed$i.txt verified on peer3"
+    fi
   else
-    echo "✅ File mixed$i.txt verified on peer2"
-  fi
-  
-  if ! diff "$MIXFILE" ./$TEST_FOLDER/verify_peer3_mixed${i}.txt > /dev/null; then
-    echo "❌ File mixed$i.txt from peer3 doesn't match original"
+    echo "⚠️ Warning: Hash file for mixed$i.txt not found, skipping verification"
     FAILURES=$((FAILURES+1))
-  else
-    echo "✅ File mixed$i.txt verified on peer3"
   fi
 done
 
 # Summary
 echo "=== Test Results ==="
-echo "Sequential upload time: $SEQ_TIME seconds"
-echo "Concurrent upload time: $CONC_TIME seconds"
-echo "Concurrent download time: $DL_TIME seconds"
-echo "Concurrent mixed operations time: $MIXED_TIME seconds"
-
-if [[ "$SPEEDUP" == "N/A"* ]]; then
-  echo "Concurrency speedup: $SPEEDUP"
-else
-  printf "Concurrency speedup: %.2fx\n" $SPEEDUP
-fi
+echo "See the timing results above for each test."
+echo "Note: Compare 'real' times for performance measurement."
 
 # Cleanup
 if [ $FAILURES -eq 0 ]; then
