@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"shard/internal/sharding"
 	"strconv"
+	"sync"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // RequestFileFromPeers to handle shard reconstruction
@@ -58,6 +61,22 @@ func (n *P2PNode) requestMissingShards(hash string) {
 		fmt.Printf("Error discovering max index of hash %s: %v\n", hash, err)
 		return
 	}
+
+	var wg sync.WaitGroup
+	var processingWg sync.WaitGroup
+	shardChan := make(chan sharding.Shard)
+
+	// Start goroutine to collect results
+	processingWg.Add(1)
+	go func() {
+		defer processingWg.Done()
+		for shard := range shardChan {
+			n.shardMapMutex.Lock()
+			n.shardMap[hash] = append(n.shardMap[hash], shard)
+			n.shardMapMutex.Unlock()
+		}
+	}()
+
 	for i := range maxIndex + 1 {
 		// TODO: use shard manager
 		if hasShardIndex(n.shardMap[hash], i) {
@@ -65,41 +84,84 @@ func (n *P2PNode) requestMissingShards(hash string) {
 			continue
 		}
 
-		fmt.Println("Requesting shard", i)
-		shard, err := n.requestSingleShard(hash + "." + strconv.Itoa(i))
-		if err != nil {
-			break
-		}
-
-		// TODO: use shard manager
-		n.shardMapMutex.Lock()
-		n.shardMap[hash] = append(n.shardMap[hash], shard)
-		n.shardMapMutex.Unlock()
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			fmt.Println("Requesting shard", index)
+			shard, err := n.requestSingleShard(hash + "." + strconv.Itoa(index))
+			if err == nil {
+				shardChan <- shard
+			} else {
+				fmt.Printf("Failed to retrieve shard %d: %v\n", index, err)
+			}
+		}(i)
 	}
+
+	// Wait for all requests to complete and close the channel
+	wg.Wait()
+	close(shardChan)
+	
+	// Wait for the processing goroutine to finish
+	processingWg.Wait()
 }
 
 func (n *P2PNode) discoverMaxIndexOfHash(shardHash string) (int, error) {
 	fmt.Println("Requesting max index of shard", shardHash)
-	maxIndex := -1
-	for peerID := range n.peerAddrs {
-		fmt.Println("requesting max index from peer id", peerID)
+	maxIndex := n.getMaxShardIndex(shardHash)
 
-		index, err := n.requestMaxIndexOfShard(peerID, shardHash)
-		if err != nil {
-			fmt.Printf("Peer %s couldn't provide shard's max index: %v\n", peerID, err)
-			continue
-		}
-		fmt.Printf("Peer %s provided shard's max index: %d\n", peerID, index)
-		fmt.Printf("index (%d) > maxIndex (%d)\n", index, maxIndex)
-		if index > maxIndex {
-			fmt.Println("updating max index")
-			maxIndex = index
-		}
+	// check if we have any peers
+	if len(n.peerAddrs) == 0 {
+		fmt.Println("No peers available to request max index")
+		return maxIndex, nil
 	}
+
+	var wg sync.WaitGroup
+	var processingWg sync.WaitGroup
+
+	indexChan := make(chan int)
+
+	// Start a goroutine to process incoming indices
+	processingWg.Add(1)
+	go func() {
+		defer processingWg.Done()
+		for index := range indexChan {
+			if index > maxIndex {
+				fmt.Printf("Updating max index from %d to %d\n", maxIndex, index)
+				maxIndex = index
+			}
+		}
+	}()
+
+	// Start a goroutine for each peer
+	for peerID := range n.peerAddrs {
+		wg.Add(1)
+		go func(id peer.ID) {
+			defer wg.Done()
+			fmt.Println("requesting max index from peer id", id)
+
+			index, err := n.requestMaxIndexOfShard(id, shardHash)
+			if err != nil {
+				fmt.Printf("Peer %s couldn't provide shard's max index: %v\n", id, err)
+				return
+			}
+
+			fmt.Printf("Peer %s provided shard's max index: %d\n", id, index)
+			indexChan <- index
+		}(peerID)
+	}
+
+	// Wait for all requests to complete and close the channel
+	wg.Wait()
+	close(indexChan)
+
+	// Wait for the processing goroutine to finish
+	processingWg.Wait()
+
 	if maxIndex == -1 {
 		fmt.Println("shard not found in any peer")
 		return -1, fmt.Errorf("shard not found in any peer")
 	}
+
 	fmt.Printf("Max index of shard %s is %d\n", shardHash, maxIndex)
 	return maxIndex, nil
 }
