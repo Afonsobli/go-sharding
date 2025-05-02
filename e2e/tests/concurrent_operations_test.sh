@@ -136,7 +136,7 @@ FAILURES=0
 echo "Verifying original files..."
 for file in ./$TEST_FOLDER/*.txt; do
   if [[ "$file" == *"mixed"* ]]; then
-    continue  # Skip mixed files for now
+    continue  # Skip mixed files they are processed separately
   fi
   
   BASENAME=$(basename "$file")
