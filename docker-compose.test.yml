@@ -12,6 +12,11 @@ services:
         condition: service_healthy
     volumes:
       - ./test_data:/test_data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-shard_test}
+    # Required to use Docker socket
+    privileged: true
 
 volumes:
   peer1_data:

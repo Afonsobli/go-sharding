@@ -3,8 +3,8 @@ FROM golang:1.24-alpine
 WORKDIR /app
 COPY . .
 
-# Install curl, jq, and bash for scripts
-RUN apk add --no-cache curl jq bash
+# Install curl, jq, bash and docker client for container management
+RUN apk add --no-cache curl jq bash docker
 
 # Copy all test scripts from e2e directory
 COPY e2e/ /app/e2e/
