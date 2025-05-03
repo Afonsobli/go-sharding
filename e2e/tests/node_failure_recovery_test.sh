@@ -4,12 +4,15 @@ set -e
 # Source the container control helper functions
 source /app/e2e/container_control.sh
 
-echo "===== STARTING NODE FAILURE RECOVERY TEST: $(date) ====="
-echo "Running from container: $(hostname)"
-
 # Create test data directory
 TEST_FOLDER="node_failure_recovery_test"
 mkdir -p ./$TEST_FOLDER
+
+# Set up trap to call cleanup function on exit
+trap 'cleanup_and_ensure_bidirectional_connectivity "$TEST_FOLDER"' EXIT
+
+echo "===== STARTING NODE FAILURE RECOVERY TEST: $(date) ====="
+echo "Running from container: $(hostname)"
 
 echo "Creating test files..."
 # Create test files of different sizes
@@ -281,10 +284,8 @@ echo "Total files tested: $((${#HASHES[@]} + 1))" # +1 for post-recovery file
 
 if [ $FAILURES -eq 0 ]; then
   echo "✅ Node failure recovery test passed! System successfully handled node failure and recovered."
-  rm -rf ./$TEST_FOLDER
   exit 0
 else
   echo "❌ Test failed with $FAILURES errors"
-  rm -rf ./$TEST_FOLDER
   exit 1
 fi
