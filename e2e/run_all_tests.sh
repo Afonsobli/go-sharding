@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Source the container control helper functions
+source /app/e2e/container_control.sh
+
 echo "Running all E2E tests..."
 FAILED=0
 TOTAL_START_TIME=$(date +%s)
@@ -34,6 +37,11 @@ for test in /app/e2e/tests/*.sh; do
   echo "$SEPARATOR"
   echo "⚙️  TEST: $TEST_NAME"
   echo "$SEPARATOR"
+  
+  # Check network connectivity before running the test
+  echo "Network status before running test:"
+  check_network_connectivity
+  
   START_TIME=$(date +%s)
   
   if ! $test; then
@@ -50,6 +58,11 @@ for test in /app/e2e/tests/*.sh; do
   DURATION=$((END_TIME - START_TIME))
   TEST_TIMES["$TEST_NAME"]=$DURATION
   echo "⏱️  Time: ${DURATION}s"
+  
+  # Check network connectivity after running the test
+  echo "Network status after running test:"
+  check_network_connectivity
+  
   echo ""
 done
 
